@@ -28,6 +28,10 @@ print_error() {
     echo -e "${RED}[✗]${NC} $1"
 }
 
+print_info() {
+    echo -e "${BLUE}[i]${NC} $1"
+}
+
 # Header
 echo
 echo "🚀 Prime Compute Manager Installer"
@@ -70,32 +74,9 @@ if command -v prime &> /dev/null; then
         print_success "prime-cli is authenticated"
     fi
 else
-    print_warning "prime-cli not found"
-    print_status "Checking for pip/pip3..."
-    
-    # Try to find pip or pip3
-    if command -v pip3 &> /dev/null; then
-        PIP_CMD="pip3"
-    elif command -v pip &> /dev/null; then
-        PIP_CMD="pip"
-    else
-        print_warning "pip/pip3 not found in global environment"
-        print_warning "Will install prime-cli in virtual environment instead"
-        PIP_CMD=""
-    fi
-    
-    if [ -n "$PIP_CMD" ]; then
-        print_status "Installing prime-cli globally using $PIP_CMD..."
-        $PIP_CMD install prime-cli --quiet
-        if command -v prime &> /dev/null; then
-            print_success "prime-cli installed successfully"
-            print_warning "You need to authenticate with prime-cli"
-            print_warning "After installation, run: prime login"
-        else
-            print_warning "Could not install prime-cli globally"
-            print_warning "Will install in virtual environment instead"
-        fi
-    fi
+    print_info "prime-cli not found globally"
+    print_info "prime-cli will be installed in the virtual environment"
+    print_info "This is the recommended approach for modern Python installations"
 fi
 
 # Create virtual environment if it doesn't exist
