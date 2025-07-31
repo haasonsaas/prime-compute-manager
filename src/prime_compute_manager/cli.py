@@ -47,7 +47,7 @@ def list_resources(gpu_type: Optional[str], min_count: int, max_cost: Optional[f
             gpu_type=gpu_type,
             min_count=min_count, 
             max_cost_per_hour=max_cost,
-            region=region
+            regions=region
         )
         
         if output_json:

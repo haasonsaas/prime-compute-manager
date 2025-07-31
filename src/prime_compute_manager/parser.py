@@ -1,7 +1,7 @@
 """Parser for prime-cli table output."""
 
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 
 def parse_availability_table(output: str) -> List[Dict[str, Any]]:
@@ -35,7 +35,7 @@ def parse_availability_table(output: str) -> List[Dict[str, Any]]:
             data_lines.append(line)
     
     # Parse each data row
-    current_resource = None
+    current_resource: Optional[Dict[str, Any]] = None
     for line in data_lines:
         # Split by │ and clean up
         parts = [part.strip() for part in line.split('│') if part.strip()]

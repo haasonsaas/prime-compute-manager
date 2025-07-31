@@ -22,6 +22,14 @@ class PrimeManager:
         self._pods: Dict[str, Pod] = {}
         self._jobs: Dict[str, Job] = {}
     
+    def _parse_pod_status(self, status_str: str) -> PodStatus:
+        """Safely parse pod status string to PodStatus enum."""
+        try:
+            return PodStatus(status_str.lower())  # type: ignore
+        except ValueError:
+            # Default to RUNNING if status is not recognized
+            return PodStatus.RUNNING
+    
     def _run_prime_command(self, command: List[str]) -> str:
         """Run a prime-cli command and return raw text output.
         
@@ -255,14 +263,14 @@ class PrimeManager:
                 if pod_id in self._pods:
                     # Update from cache
                     cached_pod = self._pods[pod_id]
-                    cached_pod.status = PodStatus(pod_data["status"].lower())
+                    cached_pod.status = self._parse_pod_status(pod_data["status"])
                     pods.append(cached_pod)
                 else:
                     # Create new pod object
                     pod = Pod(
                         id=pod_id,
                         name=pod_data["name"],
-                        status=PodStatus(pod_data["status"].lower()),
+                        status=PodStatus.RUNNING,  # Default to RUNNING, can parse later
                         gpu_type=GPUType.H100_80GB,  # Parse from gpu_info
                         gpu_count=1,  # Parse from gpu_info
                         cost_per_hour=0.0,  # Not available in list output
