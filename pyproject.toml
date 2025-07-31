@@ -23,7 +23,7 @@ classifiers = [
 ]
 requires-python = ">=3.8"
 dependencies = [
-    "prime-cli>=0.1.0",
+    "prime-cli",
     "click>=8.0.0",
     "rich>=13.0.0",
     "pydantic>=2.0.0",

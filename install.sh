@@ -71,16 +71,30 @@ if command -v prime &> /dev/null; then
     fi
 else
     print_warning "prime-cli not found"
-    print_status "Installing prime-cli..."
-    pip install prime-cli --quiet
-    if command -v prime &> /dev/null; then
-        print_success "prime-cli installed successfully"
-        print_warning "You need to authenticate with prime-cli"
-        print_warning "After installation, run: prime login"
+    print_status "Checking for pip/pip3..."
+    
+    # Try to find pip or pip3
+    if command -v pip3 &> /dev/null; then
+        PIP_CMD="pip3"
+    elif command -v pip &> /dev/null; then
+        PIP_CMD="pip"
     else
-        print_error "Failed to install prime-cli"
-        print_error "Please install it manually: pip install prime-cli"
-        exit 1
+        print_warning "pip/pip3 not found in global environment"
+        print_warning "Will install prime-cli in virtual environment instead"
+        PIP_CMD=""
+    fi
+    
+    if [ -n "$PIP_CMD" ]; then
+        print_status "Installing prime-cli globally using $PIP_CMD..."
+        $PIP_CMD install prime-cli --quiet
+        if command -v prime &> /dev/null; then
+            print_success "prime-cli installed successfully"
+            print_warning "You need to authenticate with prime-cli"
+            print_warning "After installation, run: prime login"
+        else
+            print_warning "Could not install prime-cli globally"
+            print_warning "Will install in virtual environment instead"
+        fi
     fi
 fi
 
@@ -106,6 +120,16 @@ pip install --upgrade pip --quiet
 print_status "Installing Prime Compute Manager..."
 pip install -e . --quiet
 print_success "Prime Compute Manager installed"
+
+# Ensure prime-cli is installed in virtual environment
+print_status "Ensuring prime-cli is installed in virtual environment..."
+pip install prime-cli --quiet
+if .venv/bin/prime --version &> /dev/null; then
+    print_success "prime-cli is available in virtual environment"
+else
+    print_error "Failed to install prime-cli in virtual environment"
+    print_error "Please install it manually: .venv/bin/pip install prime-cli"
+fi
 
 # Create convenient launcher script
 print_status "Creating launcher script..."
