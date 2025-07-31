@@ -3,24 +3,42 @@
 import subprocess
 import json
 import uuid
+import sys
+import os
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 from .models import GPUResource, Pod, GPUType, PodStatus, Job, JobStatus
 from .parser import parse_availability_table, parse_pods_table, parse_gpu_types_table
+try:
+    from .api_client import PrimeAPIClient
+    HAS_API_CLIENT = True
+except ImportError:
+    HAS_API_CLIENT = False
 
 
 class PrimeManager:
     """Main manager for PrimeIntellect GPU resources."""
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: Optional[str] = None, use_api: bool = False):
         """Initialize the PrimeManager.
         
         Args:
             config_path: Optional path to configuration file
+            use_api: Whether to use the API client directly (requires API key)
         """
         self.config_path = config_path
         self._pods: Dict[str, Pod] = {}
         self._jobs: Dict[str, Job] = {}
+        self.use_api = use_api and HAS_API_CLIENT
+        self.api_client = None
+        
+        if self.use_api:
+            try:
+                self.api_client = PrimeAPIClient()
+            except Exception as e:
+                print(f"Warning: Failed to initialize API client: {e}")
+                print("Falling back to CLI parsing mode")
+                self.use_api = False
     
     def _parse_pod_status(self, status_str: str) -> PodStatus:
         """Safely parse pod status string to PodStatus enum."""
@@ -32,6 +50,9 @@ class PrimeManager:
     
     def _parse_gpu_type(self, gpu_type_str: str) -> GPUType:
         """Safely parse GPU type string to GPUType enum."""
+        if not gpu_type_str:
+            return GPUType.UNKNOWN
+            
         # Extract the main GPU type (first part before any additional info)
         gpu_type_main = gpu_type_str.split()[0].upper()
         
@@ -62,9 +83,16 @@ class PrimeManager:
         Raises:
             RuntimeError: If command fails
         """
+        # Try to find prime in the virtual environment first
+        prime_cmd = "prime"
+        if hasattr(sys, 'prefix') and sys.prefix:
+            venv_prime = os.path.join(sys.prefix, 'bin', 'prime')
+            if os.path.exists(venv_prime):
+                prime_cmd = venv_prime
+        
         try:
             result = subprocess.run(
-                ["prime"] + command,
+                [prime_cmd] + command,
                 capture_output=True,
                 text=True,
                 check=True
@@ -75,7 +103,7 @@ class PrimeManager:
         except FileNotFoundError:
             raise RuntimeError("prime-cli is not installed. Please install it with: pip install prime-cli")
         except subprocess.CalledProcessError as e:
-            if "Unauthorized" in e.stderr or "authentication" in e.stderr.lower():
+            if e.stderr and ("Unauthorized" in e.stderr or "authentication" in e.stderr.lower()):
                 raise RuntimeError("Not authenticated with prime-cli. Please run: prime login")
             raise RuntimeError(f"Prime CLI command failed: {e.stderr}")
     
@@ -99,6 +127,48 @@ class PrimeManager:
         Returns:
             List of available GPU resources
         """
+        # Try API first if available
+        if self.use_api and self.api_client:
+            try:
+                # Prepare region list
+                region_list = None
+                if regions:
+                    region_list = [r.strip() for r in regions.split(',')]
+                
+                # Get data from API
+                api_data = self.api_client.get_availability(
+                    regions=region_list,
+                    gpu_count=min_count if min_count > 1 else None,
+                    gpu_type=gpu_type
+                )
+                
+                # Convert to GPUResource objects
+                resources = self.api_client.to_gpu_resources(api_data)
+                
+                # Apply local filters
+                filtered = []
+                for resource in resources:
+                    # Filter by provider if specified
+                    if provider and provider.lower() not in resource.provider.lower():
+                        continue
+                    
+                    # Filter by max cost
+                    if max_cost_per_hour and resource.cost_per_hour > max_cost_per_hour:
+                        continue
+                    
+                    # Filter by availability
+                    if resource.available_count < min_count:
+                        continue
+                    
+                    filtered.append(resource)
+                
+                return filtered
+                
+            except Exception as e:
+                print(f"API call failed: {e}")
+                print("Falling back to CLI parsing")
+        
+        # Fallback to CLI parsing
         # NOTE: prime-cli has an internal API but it's not fully exposed for external use
         # The only reliable way to get data is by parsing the CLI output
         # This is fragile and will break when they change their table format

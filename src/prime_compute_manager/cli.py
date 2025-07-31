@@ -23,9 +23,12 @@ def main():
 
 
 @main.group()
-def resources():
+@click.option('--use-api', is_flag=True, help='Use direct API access (requires API key)')
+@click.pass_context
+def resources(ctx, use_api):
     """Manage GPU resources."""
-    pass
+    ctx.ensure_object(dict)
+    ctx.obj['use_api'] = use_api
 
 
 @main.group()  
@@ -40,11 +43,13 @@ def pods():
 @click.option("--max-cost", type=float, help="Maximum cost per hour per GPU")
 @click.option("--region", help="Preferred region")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
-def list_resources(gpu_type: Optional[str], min_count: int, max_cost: Optional[float], 
+@click.pass_context
+def list_resources(ctx, gpu_type: Optional[str], min_count: int, max_cost: Optional[float], 
                   region: Optional[str], output_json: bool):
     """List available GPU resources."""
     try:
-        manager = PrimeManager()
+        use_api = ctx.obj.get('use_api', False)
+        manager = PrimeManager(use_api=use_api)
         resources = manager.find_gpus(
             gpu_type=gpu_type,
             min_count=min_count, 

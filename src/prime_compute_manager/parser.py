@@ -14,6 +14,10 @@ def parse_availability_table(output: str) -> List[Dict[str, Any]]:
         List of resource configurations
     """
     resources = []
+    
+    if not output:
+        return resources
+        
     lines = output.strip().split('\n')
     
     # Find where the data section starts and ends
@@ -41,6 +45,9 @@ def parse_availability_table(output: str) -> List[Dict[str, Any]]:
             continue
         
         # Parse the line into columns
+        if not line:
+            i += 1
+            continue
         parts = [p.strip() for p in line.split('│')[1:-1]]  # Remove empty first/last
         
         # Check if this is the start of a new resource (has an ID in first column)
@@ -55,6 +62,8 @@ def parse_availability_table(output: str) -> List[Dict[str, Any]]:
                 if not next_line.startswith('│'):
                     break
                     
+                if not next_line:
+                    break
                 next_parts = [p.strip() for p in next_line.split('│')[1:-1]]
                 
                 # If the first column has content, it's a new resource
