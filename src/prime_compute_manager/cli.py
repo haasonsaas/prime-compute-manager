@@ -20,6 +20,18 @@ def main():
     pass
 
 
+@main.command()
+def tui():
+    """Launch the interactive TUI (Terminal User Interface)."""
+    try:
+        from .tui import run_tui
+        run_tui()
+    except ImportError:
+        console.print("❌ TUI requires textual. Install with: pip install 'prime-compute-manager[tui]'", style="red")
+    except Exception as e:
+        console.print(f"❌ Failed to start TUI: {e}", style="red")
+
+
 @main.group()
 def resources():
     """Manage GPU resources."""

@@ -83,11 +83,37 @@ pcm resources list --gpu-type H100_80GB
 pcm pods create --gpu-type H100_80GB --count 2 --name training-job
 
 # Monitor pods
-pcm pods status
+pcm pods list
 
 # SSH into a pod
 pcm pods ssh POD_ID
+
+# Launch interactive TUI (Terminal User Interface)
+pcm tui
 ```
+
+### Textual TUI Interface
+
+Prime Compute Manager includes a modern Terminal User Interface (TUI) built with Textual for interactive resource management:
+
+```bash
+pcm tui
+```
+
+**TUI Features:**
+- 🎯 **Interactive Resource Browser**: Browse available GPU resources with real-time filtering
+- 🔍 **Advanced Filtering**: Filter by GPU type, cost, provider, and availability
+- 🚀 **One-Click Pod Creation**: Select a resource and press 'c' to create a pod instantly
+- 📊 **Real-Time Monitoring**: Auto-refresh every 30 seconds with live status updates
+- ⌨️ **Keyboard Shortcuts**: Full keyboard navigation (r=refresh, c=create pod, f=focus filter, q=quit)
+- 🎨 **Rich Interface**: Color-coded status indicators and progress bars
+
+**TUI Keyboard Shortcuts:**
+- `r` - Refresh data
+- `c` - Create pod from selected resource
+- `f` - Focus filter input
+- `d` - Toggle dark mode
+- `q` - Quit application
 
 ## Configuration
 
