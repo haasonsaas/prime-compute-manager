@@ -14,6 +14,30 @@ A Python wrapper for [PrimeIntellect CLI](https://github.com/PrimeIntellect-ai/p
 
 ## Installation
 
+### Quick Install (Recommended)
+
+```bash
+git clone https://github.com/haasonsaas/prime-compute-manager.git
+cd prime-compute-manager
+./install.sh
+```
+
+This one-click installer will:
+- ✅ Set up a virtual environment
+- ✅ Install all dependencies including Textual
+- ✅ Create convenient launcher scripts
+- ✅ Create a macOS app (on macOS)
+- ✅ Test the installation
+
+After installation, use the launcher:
+```bash
+./pcm-launcher.sh tui              # Launch interactive TUI
+./pcm-launcher.sh resources list   # List GPU resources
+./pcm-launcher.sh pods create      # Create a pod
+```
+
+### Manual Installation
+
 ```bash
 pip install prime-compute-manager
 ```
@@ -25,6 +49,8 @@ git clone https://github.com/haasonsaas/prime-compute-manager.git
 cd prime-compute-manager
 pip install -e ".[dev]"
 ```
+
+See [INSTALL.md](INSTALL.md) for detailed installation instructions.
 
 ## Quick Start
 
