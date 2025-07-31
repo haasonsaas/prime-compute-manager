@@ -11,9 +11,8 @@ The easiest way to install Prime Compute Manager is using the provided install s
 This will:
 - ✅ Check Python version (3.8+ required)
 - ✅ Create a virtual environment
-- ✅ Install all dependencies including Textual
+- ✅ Install all dependencies
 - ✅ Create convenient launcher scripts
-- ✅ Create a macOS app (on macOS)
 - ✅ Test the installation
 
 ## After Installation
@@ -23,22 +22,18 @@ This will:
 The installer creates a `pcm-launcher.sh` script that handles virtual environment activation:
 
 ```bash
-# Launch the interactive TUI
-./pcm-launcher.sh tui
-
 # List GPU resources
 ./pcm-launcher.sh resources list
 
 # Create a pod
 ./pcm-launcher.sh pods create --gpu-type H100_80GB --count 2 --name my-pod
 
+# List active pods
+./pcm-launcher.sh pods list
+
 # Get help
 ./pcm-launcher.sh --help
 ```
-
-### macOS App
-
-On macOS, you can double-click `PCM.app` to launch the TUI directly.
 
 ### Global Access
 
@@ -93,7 +88,6 @@ To remove the installation (keeping source code):
 This removes:
 - Virtual environment
 - Launcher scripts
-- macOS app
 - Python cache files
 
 ## Troubleshooting
@@ -107,13 +101,10 @@ Run: `prime login`
 ### "Python 3.8+ required"
 Install Python 3.8 or higher from [python.org](https://python.org)
 
-### TUI doesn't start
-Make sure Textual is installed: `pip install textual>=0.63.0`
-
 ## Features After Installation
 
-- 🎯 **Interactive TUI**: Beautiful terminal interface for GPU management
 - 🔍 **Resource Discovery**: Find GPUs across multiple providers
 - 🚀 **Pod Management**: Create and monitor compute pods
-- 📊 **Real-time Updates**: Auto-refresh every 30 seconds
-- ⌨️ **Keyboard Shortcuts**: Quick navigation (r=refresh, c=create, q=quit)
+- 📊 **Usage Monitoring**: Track costs and runtime
+- 🔧 **Easy CLI**: Simple commands for all operations
+- 🔐 **Type Safety**: Full type annotations with Pydantic

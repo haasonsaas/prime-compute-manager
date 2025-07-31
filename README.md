@@ -9,6 +9,7 @@ A Python wrapper for [PrimeIntellect CLI](https://github.com/PrimeIntellect-ai/p
 - 📊 **Usage Monitoring**: Track resource usage and costs  
 - 🔧 **Easy Integration**: Simple Python API that wraps prime-cli commands
 - 🛡️ **Type Safety**: Full type annotations and validation with Pydantic models
+- 💻 **Clean CLI**: Simple command-line interface for all operations
 
 > **Note**: This library provides a Python wrapper around the prime-cli tool. It parses prime-cli's table output and provides a more convenient API for managing GPU resources programmatically.
 
@@ -31,9 +32,9 @@ This one-click installer will:
 
 After installation, use the launcher:
 ```bash
-./pcm-launcher.sh tui              # Launch interactive TUI
 ./pcm-launcher.sh resources list   # List GPU resources
 ./pcm-launcher.sh pods create      # Create a pod
+./pcm-launcher.sh pods list        # List active pods
 ```
 
 ### Manual Installation
@@ -114,32 +115,8 @@ pcm pods list
 # SSH into a pod
 pcm pods ssh POD_ID
 
-# Launch interactive TUI (Terminal User Interface)
-pcm tui
 ```
 
-### Textual TUI Interface
-
-Prime Compute Manager includes a modern Terminal User Interface (TUI) built with Textual for interactive resource management:
-
-```bash
-pcm tui
-```
-
-**TUI Features:**
-- 🎯 **Interactive Resource Browser**: Browse available GPU resources with real-time filtering
-- 🔍 **Advanced Filtering**: Filter by GPU type, cost, provider, and availability
-- 🚀 **One-Click Pod Creation**: Select a resource and press 'c' to create a pod instantly
-- 📊 **Real-Time Monitoring**: Auto-refresh every 30 seconds with live status updates
-- ⌨️ **Keyboard Shortcuts**: Full keyboard navigation (r=refresh, c=create pod, f=focus filter, q=quit)
-- 🎨 **Rich Interface**: Color-coded status indicators and progress bars
-
-**TUI Keyboard Shortcuts:**
-- `r` - Refresh data
-- `c` - Create pod from selected resource
-- `f` - Focus filter input
-- `d` - Toggle dark mode
-- `q` - Quit application
 
 ## Configuration
 

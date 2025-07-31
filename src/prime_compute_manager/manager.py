@@ -40,7 +40,7 @@ class PrimeManager:
             return GPUType.CPU
         
         # Try to match known GPU types
-        for gpu_type in GPUType:
+        for gpu_type in GPUType.__members__.values():
             if gpu_type.value == gpu_type_main:
                 return gpu_type
             # Also try without underscores (e.g., RTX_4090 vs RTX4090)

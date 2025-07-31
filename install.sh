@@ -122,35 +122,6 @@ EOF
 chmod +x pcm-launcher.sh
 print_success "Launcher script created"
 
-# Create desktop launcher (macOS)
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    print_status "Creating macOS app launcher..."
-    mkdir -p PCM.app/Contents/MacOS
-    cat > PCM.app/Contents/Info.plist << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>pcm-tui</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.primeintellect.pcm</string>
-    <key>CFBundleName</key>
-    <string>Prime Compute Manager</string>
-    <key>CFBundleVersion</key>
-    <string>1.0</string>
-</dict>
-</plist>
-EOF
-
-    cat > PCM.app/Contents/MacOS/pcm-tui << EOF
-#!/bin/bash
-cd "$(dirname "\$0")/../../../"
-./pcm-launcher.sh tui
-EOF
-    chmod +x PCM.app/Contents/MacOS/pcm-tui
-    print_success "macOS app created (PCM.app)"
-fi
 
 # Test installation
 print_status "Testing installation..."
@@ -168,18 +139,14 @@ echo "========================"
 echo
 echo "📋 Quick Start Commands:"
 echo
-echo "  ./pcm-launcher.sh tui              # Launch interactive TUI"
 echo "  ./pcm-launcher.sh resources list   # List GPU resources"
+echo "  ./pcm-launcher.sh pods create      # Create a pod"
 echo "  ./pcm-launcher.sh pods list        # List active pods"
 echo
 echo "🎯 Or add to PATH for global access:"
 echo "  export PATH=\"\$PATH:$(pwd)\""
-echo "  pcm-launcher.sh tui"
+echo "  pcm-launcher.sh resources list"
 echo
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "🖥️  macOS Users: Double-click PCM.app to launch the TUI"
-    echo
-fi
 echo "📚 For more info: ./pcm-launcher.sh --help"
 echo
 
@@ -192,4 +159,4 @@ if ! command -v prime &> /dev/null || ! prime pods list &> /dev/null 2>&1; then
     echo
 fi
 
-print_success "Ready to use! Try: ./pcm-launcher.sh tui"
+print_success "Ready to use! Try: ./pcm-launcher.sh resources list"
