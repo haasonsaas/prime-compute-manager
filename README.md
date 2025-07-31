@@ -4,12 +4,31 @@ A Python wrapper for [PrimeIntellect CLI](https://github.com/PrimeIntellect-ai/p
 
 ## Features
 
-- 🔍 **Resource Discovery**: Find available GPU resources across providers with automatic table parsing
-- 🚀 **Pod Management**: Create, monitor, and manage compute pods using real prime-cli integration
-- 📊 **Usage Monitoring**: Track resource usage and costs  
-- 🔧 **Easy Integration**: Simple Python API that wraps prime-cli commands
-- 🛡️ **Type Safety**: Full type annotations and validation with Pydantic models
-- 💻 **Clean CLI**: Simple command-line interface for all operations
+### 🔧 **Advanced Resource Management**
+- **Advanced Filtering**: Filter by provider, cost range, minimum availability, and more
+- **Intelligent Sorting**: Sort by cost, availability, utilization, GPU type, or provider
+- **GPU Comparison Tool**: Side-by-side comparison with cost estimation for multiple time periods
+- **Resource Discovery**: Find available GPU resources across 27+ GPU types and 500+ configurations
+
+### 🖥️ **Complete Pod Operations**
+- **Real Pod Status**: Parse actual prime-cli status output with detailed information
+- **Interactive SSH**: Direct SSH session launch or command generation  
+- **Pod Logs**: Retrieve pod logs with configurable line limits
+- **Non-Interactive Creation**: Create pods with comprehensive parameters (disk, memory, environment)
+- **Dry-Run Mode**: Preview pod configuration and costs before creation
+
+### 🛡️ **Enterprise-Grade Reliability**
+- **Rate Limiting**: Exponential backoff retry for both API and CLI calls
+- **Timeout Handling**: 60-second timeouts with intelligent retry logic
+- **Hybrid API/CLI**: Best data quality with valid pod creation IDs
+- **Graceful Fallbacks**: API to CLI fallback with clear warnings
+- **Specific Error Messages**: Authentication, rate limits, resource availability
+
+### 🚀 **Production-Ready Features**
+- **Type Safety**: Full type annotations and validation with Pydantic models
+- **Cost Safety**: Dry-run mode and filtering protect against unexpected charges
+- **Smart Caching**: Local pod caching with real-time status updates
+- **Clean CLI**: Comprehensive command-line interface with JSON output support
 
 > **Note**: This library provides a Python wrapper around the prime-cli tool. It parses prime-cli's table output and provides a more convenient API for managing GPU resources programmatically.
 
@@ -83,21 +102,38 @@ from prime_compute_manager import PrimeManager
 # Initialize manager
 manager = PrimeManager()
 
-# Find available GPU configurations
-resources = manager.find_gpus(gpu_type="H100_80GB", min_count=2)
+# Find available GPU configurations with advanced filtering
+resources = manager.find_gpus(
+    gpu_type="H100_80GB", 
+    min_count=2,
+    max_cost_per_hour=5.0,
+    provider="runpod",
+    include_free=False
+)
 print(f"Found {len(resources)} available configurations")
 
-# Create a compute pod using the first available configuration
+# Create a compute pod with comprehensive configuration
 if resources:
     pod = manager.create_pod(
         gpu_type="H100_80GB",
         gpu_count=2,
-        name="my-training-job"
+        name="my-training-job",
+        disk_size=100,
+        memory=64,
+        env={"CUDA_VISIBLE_DEVICES": "0,1", "PYTHONPATH": "/workspace"}
     )
     
-    # Monitor pod status
+    # Monitor pod status with detailed information
     status = manager.get_pod_status(pod.id)
     print(f"Pod {pod.name} status: {status.status}")
+    
+    # Get pod logs
+    logs = manager.get_pod_logs(pod.id, lines=100)
+    print(f"Recent logs:\n{logs}")
+    
+    # SSH connection (get command)
+    ssh_cmd = manager.ssh_to_pod(pod.id)
+    print(f"SSH command: {ssh_cmd}")
 ```
 
 ### 3. Understanding the Workflow
@@ -113,19 +149,53 @@ This abstraction allows you to work with GPU resources without needing to unders
 
 ### Command Line Interface
 
+#### Resource Discovery & Filtering
 ```bash
-# List available resources
-pcm resources list --gpu-type H100_80GB
+# List available resources with advanced filtering
+pcm resources list --gpu-type H100_80GB --provider runpod --max-cost 5.0
 
-# Create a pod
-pcm pods create --gpu-type H100_80GB --count 2 --name training-job
+# Sort by availability (descending) and limit results
+pcm resources list --sort-by availability --sort-desc --limit 10
 
-# Monitor pods
-pcm pods list
+# Filter by cost range and minimum availability
+pcm resources list --min-cost 1.0 --max-cost 10.0 --min-availability 2
 
-# SSH into a pod
-pcm pods ssh POD_ID
+# Compare different GPU types with cost estimation
+pcm resources compare --gpu-types "H100_80GB,A100_80GB,RTX_4090"
+```
 
+#### Pod Management
+```bash
+# Create a pod with comprehensive configuration
+pcm pods create --gpu-type H100_80GB --count 2 --name training-job \
+  --disk-size 100 --memory 64 --env CUDA_VISIBLE_DEVICES=0,1 --env PYTHONPATH=/workspace
+
+# Preview pod creation (dry-run mode)
+pcm pods create --gpu-type H100_80GB --dry-run
+
+# List all pods with detailed information
+pcm pods list --json
+
+# Get detailed pod status
+pcm pods status POD_ID
+
+# Get pod logs
+pcm pods logs POD_ID --lines 200
+
+# SSH into a pod (interactive mode)
+pcm pods ssh POD_ID --interactive
+
+# Terminate a pod
+pcm pods terminate POD_ID --yes
+```
+
+#### JSON Output for Automation
+```bash
+# Get resources as JSON for scripting
+pcm resources list --json | jq '.[] | select(.cost_per_hour < 5.0)'
+
+# Compare resources with JSON output
+pcm resources compare --gpu-types "H100_80GB,A100_80GB" --json
 ```
 
 
@@ -148,54 +218,173 @@ notifications:
   email: your-email@example.com
 ```
 
-## Examples
+## Advanced Examples
 
-### Batch Job Processing
+### Resource Comparison and Cost Analysis
 
 ```python
-import asyncio
-from prime_compute_manager import PrimeManager, JobQueue
+from prime_compute_manager import PrimeManager
 
-async def main():
-    manager = PrimeManager()
-    queue = JobQueue(manager)
-    
-    # Add jobs to queue
-    jobs = [
-        {"script": "train_model.py", "args": {"epochs": 100}},
-        {"script": "evaluate.py", "args": {"model_path": "/models/best.pt"}},
-    ]
-    
-    for job in jobs:
-        queue.add_job(job)
-    
-    # Process jobs
-    await queue.process_all()
+manager = PrimeManager()
 
-if __name__ == "__main__":
-    asyncio.run(main())
+# Compare different GPU types for cost optimization
+gpu_types = ["H100_80GB", "A100_80GB", "RTX_4090"]
+comparison = {}
+
+for gpu_type in gpu_types:
+    resources = manager.find_gpus(
+        gpu_type=gpu_type,
+        min_count=1,
+        max_cost_per_hour=10.0,
+        include_free=False
+    )
+    
+    if resources:
+        cheapest = min(resources, key=lambda r: r.cost_per_hour)
+        comparison[gpu_type] = {
+            "best_price": cheapest.cost_per_hour,
+            "provider": cheapest.provider,
+            "availability": cheapest.available_count,
+            "daily_cost": cheapest.cost_per_hour * 24
+        }
+
+print("GPU Cost Comparison:")
+for gpu_type, data in comparison.items():
+    print(f"{gpu_type}: ${data['best_price']:.2f}/hr (${data['daily_cost']:.2f}/day) from {data['provider']}")
 ```
 
-### Resource Monitoring
+### Smart Pod Management with Error Handling
 
 ```python
-from prime_compute_manager import ResourceMonitor
+from prime_compute_manager import PrimeManager
+import time
 
-monitor = ResourceMonitor()
+def create_pod_with_retry(manager, gpu_type, max_retries=3):
+    """Create a pod with intelligent retry logic."""
+    
+    for attempt in range(max_retries):
+        try:
+            # Find available resources
+            resources = manager.find_gpus(
+                gpu_type=gpu_type,
+                min_count=1,
+                max_cost_per_hour=8.0,
+                include_free=False
+            )
+            
+            if not resources:
+                print(f"No {gpu_type} resources available, trying again in 30s...")
+                time.sleep(30)
+                continue
+            
+            # Create pod with comprehensive configuration
+            pod = manager.create_pod(
+                gpu_type=gpu_type,
+                gpu_count=1,
+                name=f"training-{int(time.time())}",
+                disk_size=100,
+                image="pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel",
+                env={
+                    "WANDB_API_KEY": "your-wandb-key",
+                    "CUDA_VISIBLE_DEVICES": "0"
+                }
+            )
+            
+            print(f"Pod {pod.id} created successfully!")
+            return pod
+            
+        except Exception as e:
+            print(f"Attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                print("Retrying in 60 seconds...")
+                time.sleep(60)
+    
+    raise RuntimeError(f"Failed to create pod after {max_retries} attempts")
 
-# Get current usage
-usage = monitor.get_team_usage()
-print(f"Current cost: ${usage.current_cost_per_hour:.2f}/hour")
+# Usage
+manager = PrimeManager()
+try:
+    pod = create_pod_with_retry(manager, "H100_80GB")
+    
+    # Monitor pod until running
+    while True:
+        status = manager.get_pod_status(pod.id)
+        print(f"Pod status: {status.status.value}")
+        
+        if status.status.value == "running":
+            print(f"Pod is ready! SSH: {manager.ssh_to_pod(pod.id)}")
+            break
+        elif status.status.value == "failed":
+            print("Pod failed to start")
+            break
+            
+        time.sleep(10)
+        
+except Exception as e:
+    print(f"Pod creation failed: {e}")
+```
 
-# Set up alerts
-monitor.add_alert(
-    condition="cost_per_hour > 50",
-    action="email",
-    recipient="admin@company.com"
-)
+### Automated Resource Discovery and Filtering
 
-# Start monitoring
-monitor.start()
+```python
+from prime_compute_manager import PrimeManager
+
+def find_best_value_gpu(manager, min_gpu_memory_gb=24):
+    """Find the best value GPU with sufficient memory."""
+    
+    # GPU types with their approximate memory
+    gpu_memory_map = {
+        "H100_80GB": 80,
+        "A100_80GB": 80,
+        "A100_40GB": 40,
+        "RTX_A6000": 48,
+        "RTX_4090": 24,
+        "V100_32GB": 32
+    }
+    
+    best_deals = []
+    
+    for gpu_type, memory_gb in gpu_memory_map.items():
+        if memory_gb < min_gpu_memory_gb:
+            continue
+            
+        resources = manager.find_gpus(
+            gpu_type=gpu_type,
+            min_count=1,
+            include_free=False
+        )
+        
+        if resources:
+            cheapest = min(resources, key=lambda r: r.cost_per_hour)
+            value_score = memory_gb / cheapest.cost_per_hour  # GB per dollar per hour
+            
+            best_deals.append({
+                "gpu_type": gpu_type,
+                "cost_per_hour": cheapest.cost_per_hour,
+                "memory_gb": memory_gb,
+                "value_score": value_score,
+                "provider": cheapest.provider,
+                "availability": cheapest.available_count
+            })
+    
+    # Sort by value score (descending)
+    best_deals.sort(key=lambda x: x["value_score"], reverse=True)
+    
+    print(f"Best value GPUs with ≥{min_gpu_memory_gb}GB memory:")
+    for deal in best_deals[:5]:
+        print(f"{deal['gpu_type']}: ${deal['cost_per_hour']:.2f}/hr "
+              f"({deal['memory_gb']}GB, {deal['value_score']:.1f} GB/$·hr) "
+              f"from {deal['provider']}")
+    
+    return best_deals[0] if best_deals else None
+
+# Usage
+manager = PrimeManager()
+best_gpu = find_best_value_gpu(manager, min_gpu_memory_gb=40)
+
+if best_gpu:
+    print(f"\nCreating pod with best value GPU: {best_gpu['gpu_type']}")
+    # Proceed with pod creation...
 ```
 
 ## Development
