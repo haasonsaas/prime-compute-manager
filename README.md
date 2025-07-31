@@ -1,14 +1,16 @@
 # Prime Compute Manager
 
-A Python application for managing GPU compute resources with PrimeIntellect integration.
+A Python wrapper for [PrimeIntellect CLI](https://github.com/PrimeIntellect-ai/prime-cli) that provides an easy-to-use interface for managing GPU compute resources.
 
 ## Features
 
-- 🔍 **Resource Discovery**: Find available GPU resources across providers
-- 🚀 **Pod Management**: Create, monitor, and manage compute pods
-- 👥 **Team Collaboration**: Share resources and manage team access
-- 📊 **Usage Monitoring**: Track resource usage and costs
-- 🔧 **Easy Integration**: Simple API for building custom workflows
+- 🔍 **Resource Discovery**: Find available GPU resources across providers with automatic table parsing
+- 🚀 **Pod Management**: Create, monitor, and manage compute pods using real prime-cli integration
+- 📊 **Usage Monitoring**: Track resource usage and costs  
+- 🔧 **Easy Integration**: Simple Python API that wraps prime-cli commands
+- 🛡️ **Type Safety**: Full type annotations and validation with Pydantic models
+
+> **Note**: This library provides a Python wrapper around the prime-cli tool. It parses prime-cli's table output and provides a more convenient API for managing GPU resources programmatically.
 
 ## Installation
 
@@ -28,11 +30,11 @@ pip install -e ".[dev]"
 
 ### 1. Configure PrimeIntellect CLI
 
-First, set up the prime-cli:
+First, set up the prime-cli and log in:
 
 ```bash
 pip install prime-cli
-prime config set-api-key YOUR_API_KEY
+prime login  # Follow the authentication flow
 ```
 
 ### 2. Use Prime Compute Manager
@@ -43,20 +45,33 @@ from prime_compute_manager import PrimeManager
 # Initialize manager
 manager = PrimeManager()
 
-# Find available GPUs
-gpus = manager.find_gpus(gpu_type="H100_80GB", min_count=2)
+# Find available GPU configurations
+resources = manager.find_gpus(gpu_type="H100_80GB", min_count=2)
+print(f"Found {len(resources)} available configurations")
 
-# Create a compute pod
-pod = manager.create_pod(
-    gpu_type="H100_80GB",
-    gpu_count=2,
-    name="my-training-job"
-)
-
-# Monitor pod status
-status = manager.get_pod_status(pod.id)
-print(f"Pod status: {status}")
+# Create a compute pod using the first available configuration
+if resources:
+    pod = manager.create_pod(
+        gpu_type="H100_80GB",
+        gpu_count=2,
+        name="my-training-job"
+    )
+    
+    # Monitor pod status
+    status = manager.get_pod_status(pod.id)
+    print(f"Pod {pod.name} status: {status.status}")
 ```
+
+### 3. Understanding the Workflow
+
+Prime Compute Manager works by:
+
+1. **Resource Discovery**: Using `prime availability list` to find available GPU configurations
+2. **Configuration Selection**: Automatically selecting the best configuration based on your criteria
+3. **Pod Creation**: Using `prime pods create --id <config_id>` to create pods with specific configurations
+4. **Management**: Providing Python objects and methods to monitor and manage your resources
+
+This abstraction allows you to work with GPU resources without needing to understand the underlying prime-cli table formats and configuration IDs.
 
 ### Command Line Interface
 
