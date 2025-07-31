@@ -99,7 +99,12 @@ class PrimeManager:
         Returns:
             List of available GPU resources
         """
-        # Build command
+        # NOTE: prime-cli has an internal API but it's not fully exposed for external use
+        # The only reliable way to get data is by parsing the CLI output
+        # This is fragile and will break when they change their table format
+        # Consider requesting a --json output option from the prime-cli maintainers
+        
+        # Use CLI and parse the table output
         cmd = ["availability", "list"]
         # Note: We filter gpu_type client-side to avoid API errors with unrecognized types
         if min_count > 1:
