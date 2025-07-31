@@ -65,7 +65,12 @@ def list_resources(ctx, gpu_type: Optional[str], min_count: int, max_cost: Optio
             console.print("[red]No GPU resources found matching criteria[/red]")
             return
         
-        table = Table(title="Available GPU Resources")
+        # Check if we're using degraded mode
+        title = "Available GPU Resources"
+        if not manager.use_api:
+            title += " [yellow](CLI Parsing Mode - Limited Quality)[/yellow]"
+        
+        table = Table(title=title)
         table.add_column("GPU Type", style="cyan")
         table.add_column("Available", justify="right")
         table.add_column("Total", justify="right") 
@@ -86,6 +91,11 @@ def list_resources(ctx, gpu_type: Optional[str], min_count: int, max_cost: Optio
             )
         
         console.print(table)
+        
+        # Show warning if there are unknown GPU types
+        if not manager.use_api and any(r.gpu_type.value == "UNKNOWN" for r in resources):
+            console.print("\n[yellow]⚠️  Note: Some GPU types shown as 'UNKNOWN' due to truncated CLI output.[/yellow]")
+            console.print("[yellow]   For accurate GPU identification, authenticate with: [bold]prime login[/bold][/yellow]")
         
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

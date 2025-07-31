@@ -36,8 +36,14 @@ class PrimeManager:
             try:
                 self.api_client = PrimeAPIClient()
             except Exception as e:
-                print(f"Warning: Failed to initialize API client: {e}")
-                print("Falling back to CLI parsing mode")
+                from rich.console import Console
+                stderr_console = Console(stderr=True)
+                stderr_console.print(f"\n[yellow]⚠️  Warning:[/yellow] Failed to initialize API client: {e}")
+                stderr_console.print("[red]📉 Falling back to CLI parsing mode (degraded quality)[/red]")
+                stderr_console.print("   [dim]- GPU types may show as 'UNKNOWN' due to truncated output[/dim]")
+                stderr_console.print("   [dim]- Pricing data may be incomplete ($0.00 shown)[/dim]")
+                stderr_console.print("   [dim]- Results are limited by table width constraints[/dim]")
+                stderr_console.print("\n[blue]💡 For best results, authenticate with:[/blue] [bold]prime login[/bold]\n")
                 self.use_api = False
     
     def _parse_pod_status(self, status_str: str) -> PodStatus:
@@ -165,8 +171,10 @@ class PrimeManager:
                 return filtered
                 
             except Exception as e:
-                print(f"API call failed: {e}")
-                print("Falling back to CLI parsing")
+                from rich.console import Console
+                stderr_console = Console(stderr=True)
+                stderr_console.print(f"\n[yellow]⚠️  API call failed:[/yellow] {e}")
+                stderr_console.print("[red]📉 Falling back to CLI parsing (degraded quality)[/red]")
         
         # Fallback to CLI parsing
         # NOTE: prime-cli has an internal API but it's not fully exposed for external use
