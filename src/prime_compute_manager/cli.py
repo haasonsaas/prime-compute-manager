@@ -95,7 +95,21 @@ def list_resources(ctx, gpu_type: Optional[str], min_count: int, max_cost: Optio
         # Show warning if there are unknown GPU types
         if not manager.use_api and any(r.gpu_type.value == "UNKNOWN" for r in resources):
             console.print("\n[yellow]⚠️  Note: Some GPU types shown as 'UNKNOWN' due to truncated CLI output.[/yellow]")
-            console.print("[yellow]   For accurate GPU identification, authenticate with: [bold]prime login[/bold][/yellow]")
+            
+            # Check if we can find prime in venv to give better instructions
+            import os
+            import sys
+            venv_prime = None
+            if hasattr(sys, 'prefix') and sys.prefix:
+                venv_prime_path = os.path.join(sys.prefix, 'bin', 'prime')
+                if os.path.exists(venv_prime_path):
+                    venv_prime = venv_prime_path
+            
+            if venv_prime:
+                console.print(f"[yellow]   For accurate GPU identification, authenticate with: [bold]{venv_prime} login[/bold][/yellow]")
+                console.print("[yellow]   Or simply run: [bold]./prime-login.sh[/bold][/yellow]")
+            else:
+                console.print("[yellow]   For accurate GPU identification, authenticate with: [bold]prime login[/bold][/yellow]")
         
     except Exception as e:
         console.print(f"[red]Error: {e}[/red]")

@@ -43,7 +43,19 @@ class PrimeManager:
                 stderr_console.print("   [dim]- GPU types may show as 'UNKNOWN' due to truncated output[/dim]")
                 stderr_console.print("   [dim]- Pricing data may be incomplete ($0.00 shown)[/dim]")
                 stderr_console.print("   [dim]- Results are limited by table width constraints[/dim]")
-                stderr_console.print("\n[blue]💡 For best results, authenticate with:[/blue] [bold]prime login[/bold]\n")
+                # Check if we can find prime in venv to give better instructions
+                import os
+                venv_prime = None
+                if hasattr(sys, 'prefix') and sys.prefix:
+                    venv_prime_path = os.path.join(sys.prefix, 'bin', 'prime')
+                    if os.path.exists(venv_prime_path):
+                        venv_prime = venv_prime_path
+                
+                if venv_prime:
+                    stderr_console.print(f"\n[blue]💡 For best results, authenticate with:[/blue] [bold]{venv_prime} login[/bold]")
+                    stderr_console.print("[blue]   Or simply run:[/blue] [bold]./prime-login.sh[/bold]\n")
+                else:
+                    stderr_console.print("\n[blue]💡 For best results, authenticate with:[/blue] [bold]prime login[/bold]\n")
                 self.use_api = False
     
     def _parse_pod_status(self, status_str: str) -> PodStatus:

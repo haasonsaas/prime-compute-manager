@@ -64,6 +64,17 @@ pip install prime-cli
 prime login  # Follow the authentication flow
 ```
 
+**If you used the quick install**, prime-cli is already installed in the virtual environment. Use:
+
+```bash
+./prime-login.sh  # Helper script for authentication
+```
+
+Or directly:
+```bash
+./.venv/bin/prime login
+```
+
 ### 2. Use Prime Compute Manager
 
 ```python
