@@ -70,7 +70,18 @@ if command -v prime &> /dev/null; then
         print_success "prime-cli is authenticated"
     fi
 else
-    print_warning "prime-cli not found globally"
+    print_warning "prime-cli not found"
+    print_status "Installing prime-cli..."
+    pip install prime-cli --quiet
+    if command -v prime &> /dev/null; then
+        print_success "prime-cli installed successfully"
+        print_warning "You need to authenticate with prime-cli"
+        print_warning "After installation, run: prime login"
+    else
+        print_error "Failed to install prime-cli"
+        print_error "Please install it manually: pip install prime-cli"
+        exit 1
+    fi
 fi
 
 # Create virtual environment if it doesn't exist
@@ -106,10 +117,23 @@ cat > pcm-launcher.sh << 'EOF'
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Activate virtual environment
+# shellcheck disable=SC1091
 source "$SCRIPT_DIR/.venv/bin/activate"
 
+# Check if prime-cli is installed
+if ! command -v prime &> /dev/null; then
+    echo "❌ Error: prime-cli is not installed!"
+    echo ""
+    echo "Please install it first:"
+    echo "   pip install prime-cli"
+    echo ""
+    echo "After installing, authenticate with:"
+    echo "   prime login"
+    exit 1
+fi
+
 # Check if prime-cli is authenticated
-if ! prime pods list &> /dev/null; then
+if ! prime pods list &> /dev/null 2>&1; then
     echo "⚠️  Please authenticate with prime-cli first:"
     echo "   Run: prime login"
     echo
@@ -150,12 +174,27 @@ echo
 echo "📚 For more info: ./pcm-launcher.sh --help"
 echo
 
+# Check prime-cli in the virtual environment
+print_status "Verifying prime-cli installation in virtual environment..."
+if ! .venv/bin/prime --version &> /dev/null; then
+    print_warning "prime-cli not found in virtual environment"
+    print_status "Installing prime-cli in virtual environment..."
+    .venv/bin/pip install prime-cli --quiet
+    if .venv/bin/prime --version &> /dev/null; then
+        print_success "prime-cli installed in virtual environment"
+    else
+        print_error "Failed to install prime-cli in virtual environment"
+        exit 1
+    fi
+else
+    print_success "prime-cli is available in virtual environment"
+fi
+
 # Check prime-cli auth status one more time
-if ! command -v prime &> /dev/null || ! prime pods list &> /dev/null 2>&1; then
+if ! .venv/bin/prime pods list &> /dev/null 2>&1; then
     echo
     print_warning "Remember to authenticate prime-cli before using PCM:"
-    echo "  1. Install prime-cli: pip install prime-cli"
-    echo "  2. Authenticate: prime login"
+    echo "  Run: prime login"
     echo
 fi
 

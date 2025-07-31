@@ -72,7 +72,11 @@ class PrimeManager:
             
             return result.stdout
                 
+        except FileNotFoundError:
+            raise RuntimeError("prime-cli is not installed. Please install it with: pip install prime-cli")
         except subprocess.CalledProcessError as e:
+            if "Unauthorized" in e.stderr or "authentication" in e.stderr.lower():
+                raise RuntimeError("Not authenticated with prime-cli. Please run: prime login")
             raise RuntimeError(f"Prime CLI command failed: {e.stderr}")
     
     def find_gpus(
