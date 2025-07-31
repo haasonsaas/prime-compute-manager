@@ -32,16 +32,23 @@ class GPUType(str, Enum):
     A100_80GB = "A100_80GB"
     A100_40GB = "A100_40GB"
     
+    # Professional GPUs
+    RTX_A6000 = "RTX_A6000"
+    RTX_A5000 = "RTX_A5000"
+    RTX_A4000 = "RTX_A4000"
+    
     # Mid-range GPUs
     L40 = "L40"
     L40S = "L40S"
     L4 = "L4"
     A10 = "A10"
     V100_32GB = "V100_32GB"
+    V100_16GB = "V100_16GB"
     V100 = "V100"
     
     # Consumer GPUs
     RTX_4090 = "RTX_4090"
+    RTX_4080 = "RTX_4080"
     RTX_3090 = "RTX_3090"
     RTX_3080 = "RTX_3080"
     
