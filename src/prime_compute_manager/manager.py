@@ -147,7 +147,10 @@ class PrimeManager:
         Returns:
             List of available GPU resources
         """
-        # Try API first if available
+        # Try API first if available, but also get CLI data for correct IDs
+        api_resources = []
+        cli_resources = []
+        
         if self.use_api and self.api_client:
             try:
                 # Prepare region list
@@ -163,30 +166,7 @@ class PrimeManager:
                 )
                 
                 # Convert to GPUResource objects
-                resources = self.api_client.to_gpu_resources(api_data)
-                
-                # Apply local filters
-                filtered = []
-                for resource in resources:
-                    # Filter by provider if specified
-                    if provider and provider.lower() not in resource.provider.lower():
-                        continue
-                    
-                    # Filter by max cost
-                    if max_cost_per_hour and resource.cost_per_hour > max_cost_per_hour:
-                        continue
-                    
-                    # Filter by availability
-                    if resource.available_count < min_count:
-                        continue
-                    
-                    # Filter out $0.00 entries (likely unavailable/placeholder) unless requested
-                    if not include_free and resource.cost_per_hour <= 0.0:
-                        continue
-
-                    filtered.append(resource)
-                
-                return filtered
+                api_resources = self.api_client.to_gpu_resources(api_data)
                 
             except Exception as e:
                 from rich.console import Console
@@ -194,62 +174,97 @@ class PrimeManager:
                 stderr_console.print(f"\n[yellow]⚠️  API call failed:[/yellow] {e}")
                 stderr_console.print("[red]📉 Falling back to CLI parsing (degraded quality)[/red]")
         
-        # Fallback to CLI parsing
-        # NOTE: prime-cli has an internal API but it's not fully exposed for external use
-        # The only reliable way to get data is by parsing the CLI output
-        # This is fragile and will break when they change their table format
-        # Consider requesting a --json output option from the prime-cli maintainers
-        
-        # Use CLI and parse the table output
-        cmd = ["availability", "list"]
-        # Note: We filter gpu_type client-side to avoid API errors with unrecognized types
-        if min_count > 1:
-            cmd.extend(["--gpu-count", str(min_count)])
-        if regions:
-            cmd.extend(["--regions", regions])
-        if provider:
-            cmd.extend(["--provider", provider])
-        
+        # Always get CLI data for correct prime IDs (needed for pod creation)
         try:
-            output = self._run_prime_command(cmd)
+            cmd = ["availability", "list"]
+            if min_count > 1:
+                cmd.extend(["--gpu-count", str(min_count)])
+            if regions:
+                cmd.extend(["--regions", regions])
+            if provider:
+                cmd.extend(["--provider", provider])
             
-            # Parse the table output
+            output = self._run_prime_command(cmd)
             parsed_resources = parse_availability_table(output)
             
-            # Convert to GPUResource objects
-            resources = []
+            # Convert CLI data to GPUResource objects
             for resource_data in parsed_resources:
-                # Parse GPU type first
                 parsed_gpu_type = self._parse_gpu_type(resource_data["gpu_type"])
                 
-                # Apply filters including GPU type filter
                 if gpu_type and parsed_gpu_type.value != gpu_type:
-                    continue  # Skip if doesn't match requested GPU type
+                    continue
                     
                 if resource_data["available_count"] >= min_count:
                     if max_cost_per_hour is None or resource_data["cost_per_hour"] <= max_cost_per_hour:
-                        # Convert to our GPUResource model
                         gpu_resource = GPUResource(
                             gpu_type=parsed_gpu_type,
                             available_count=resource_data["available_count"],
                             total_count=resource_data["total_count"], 
                             cost_per_hour=resource_data["cost_per_hour"],
                             provider=resource_data["provider"],
-                            region=resource_data["location"]
+                            region=resource_data["location"],
+                            prime_id=resource_data["id"]  # This is the correct short ID
                         )
-                        # Store the original ID for pod creation
-                        gpu_resource.prime_id = resource_data["id"]
-                        resources.append(gpu_resource)
-            
-            return resources
-            
+                        cli_resources.append(gpu_resource)
+        
         except Exception as e:
-            raise RuntimeError(f"Failed to find GPUs: {e}")
+            if not api_resources:  # Only fail if we don't have API fallback
+                raise RuntimeError(f"Failed to get GPU data: {e}")
+        
+        # Use API resources if available (better data quality), but merge in CLI IDs
+        if api_resources and cli_resources:
+            # Try to match API resources with CLI resources to get correct IDs
+            enhanced_resources = []
+            for api_resource in api_resources:
+                # Find matching CLI resource by GPU type and provider
+                matching_cli = None
+                for cli_resource in cli_resources:
+                    if (cli_resource.gpu_type == api_resource.gpu_type and 
+                        cli_resource.provider.lower() == api_resource.provider.lower()):
+                        matching_cli = cli_resource
+                        break
+                
+                # Use API data but with CLI's correct prime_id
+                if matching_cli:
+                    api_resource.prime_id = matching_cli.prime_id
+                    
+                enhanced_resources.append(api_resource)
+            
+            resources_to_filter = enhanced_resources
+        elif api_resources:
+            resources_to_filter = api_resources
+        else:
+            resources_to_filter = cli_resources
+        
+        # Apply local filters
+        filtered = []
+        for resource in resources_to_filter:
+            # Filter by provider if specified
+            if provider and provider.lower() not in resource.provider.lower():
+                continue
+            
+            # Filter by max cost
+            if max_cost_per_hour and resource.cost_per_hour > max_cost_per_hour:
+                continue
+            
+            # Filter by availability
+            if resource.available_count < min_count:
+                continue
+            
+            # Filter out $0.00 entries (likely unavailable/placeholder) unless requested
+            if not include_free and resource.cost_per_hour <= 0.0:
+                continue
+
+            filtered.append(resource)
+        
+        return filtered
     
     def create_pod_from_config(
         self,
         prime_id: str,
         name: Optional[str] = None,
+        disk_size: int = 50,
+        image: str = "pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel",
         **kwargs
     ) -> Pod:
         """Create a new compute pod using a prime-cli configuration ID.
@@ -257,6 +272,8 @@ class PrimeManager:
         Args:
             prime_id: Configuration ID from prime availability list
             name: Optional pod name
+            disk_size: Disk size in GB (default: 50)
+            image: Container image (default: PyTorch with CUDA)
             **kwargs: Additional pod configuration (stored as metadata)
             
         Returns:
@@ -265,39 +282,111 @@ class PrimeManager:
         if name is None:
             name = f"pod-{uuid.uuid4().hex[:8]}"
         
-        # Build command using --id parameter
-        cmd = ["pods", "create", "--id", prime_id]
-        if name:
-            cmd.extend(["--name", name])
+        # Build command with all required parameters to avoid interactive prompts
+        cmd = [
+            "pods", "create",
+            "--id", prime_id,
+            "--name", name,
+            "--disk-size", str(disk_size),
+            "--image", image
+        ]
+        
+        # Add any additional parameters from kwargs
+        if "vcpus" in kwargs:
+            cmd.extend(["--vcpus", str(kwargs["vcpus"])])
+        if "memory" in kwargs:
+            cmd.extend(["--memory", str(kwargs["memory"])])
+        if "gpu_count" in kwargs:
+            cmd.extend(["--gpu-count", str(kwargs["gpu_count"])])
+        if "team_id" in kwargs:
+            cmd.extend(["--team-id", kwargs["team_id"]])
+        
+        # Add environment variables
+        if "env" in kwargs and isinstance(kwargs["env"], dict):
+            for key, value in kwargs["env"].items():
+                cmd.extend(["--env", f"{key}={value}"])
         
         try:
-            # Note: This would be interactive in real usage
-            # For now, we'll simulate the creation
+            from rich.console import Console
+            stderr_console = Console(stderr=True)
+            stderr_console.print(f"[green]Creating pod with ID: {prime_id}[/green]")
+            stderr_console.print(f"[dim]Command: prime {' '.join(cmd)}[/dim]")
+            
             output = self._run_prime_command(cmd)
             
             # Parse the output to extract pod information
-            # In real implementation, prime-cli would return pod details
-            pod_id = f"pod-{uuid.uuid4().hex}"
+            # Look for pod ID in the output
+            import re
+            pod_id_match = re.search(r'Pod (\w+) created', output)
+            if pod_id_match:
+                pod_id = pod_id_match.group(1)
+            else:
+                # Fallback to generated ID if parsing fails
+                pod_id = f"pod-{uuid.uuid4().hex[:12]}"
             
-            # Create pod object (this would normally be parsed from output)
+            # Try to extract more details from output
+            gpu_type = GPUType.UNKNOWN
+            gpu_count = kwargs.get("gpu_count", 1)
+            cost_per_hour = 0.0
+            provider = "Unknown"
+            region = "Unknown"
+            
+            # Find the original resource to get accurate details
+            try:
+                resources = self.find_gpus(include_free=True)
+                matching_resource = None
+                for resource in resources:
+                    if resource.prime_id == prime_id:
+                        matching_resource = resource
+                        break
+                
+                if matching_resource:
+                    gpu_type = matching_resource.gpu_type
+                    cost_per_hour = matching_resource.cost_per_hour
+                    provider = matching_resource.provider
+                    region = matching_resource.region
+                    
+            except Exception:
+                pass  # Use defaults if we can't find the resource
+            
+            # Create pod object
             pod = Pod(
                 id=pod_id,
                 name=name,
                 status=PodStatus.CREATING,
-                gpu_type=GPUType.H100_80GB,  # Would be parsed from config
-                gpu_count=1,  # Would be parsed from config
-                cost_per_hour=3.20,  # Would be parsed from config
+                gpu_type=gpu_type,
+                gpu_count=gpu_count,
+                cost_per_hour=cost_per_hour,
                 created_at=datetime.utcnow(),
-                provider="AWS",  # Would be parsed from config
-                region="us-west-2",  # Would be parsed from config
-                metadata={"prime_id": prime_id, **kwargs}
+                provider=provider,
+                region=region,
+                metadata={
+                    "prime_id": prime_id, 
+                    "disk_size": disk_size,
+                    "image": image,
+                    **kwargs
+                }
             )
             
             self._pods[pod_id] = pod
+            stderr_console.print(f"[green]✓ Pod {pod_id} created successfully![/green]")
             return pod
             
         except Exception as e:
-            raise RuntimeError(f"Failed to create pod: {e}")
+            # Provide detailed error information
+            error_msg = str(e)
+            if "not found" in error_msg.lower() or "invalid" in error_msg.lower():
+                raise RuntimeError(f"Prime ID '{prime_id}' is not valid for pod creation. "
+                                 f"Try listing resources again to get a fresh ID. "
+                                 f"Original error: {e}")
+            elif "insufficient" in error_msg.lower() or "quota" in error_msg.lower():
+                raise RuntimeError(f"Insufficient resources or quota exceeded. "
+                                 f"Original error: {e}")
+            elif "auth" in error_msg.lower():
+                raise RuntimeError(f"Authentication failed. Please run 'prime login'. "
+                                 f"Original error: {e}")
+            else:
+                raise RuntimeError(f"Failed to create pod: {e}")
     
     def create_pod(
         self,
@@ -305,6 +394,7 @@ class PrimeManager:
         gpu_count: int = 1,
         name: Optional[str] = None,
         max_cost_per_hour: Optional[float] = None,
+        regions: Optional[str] = None,
         **kwargs
     ) -> Pod:
         """Create a pod by finding a suitable configuration first.
@@ -314,6 +404,7 @@ class PrimeManager:
             gpu_count: Number of GPUs  
             name: Optional pod name
             max_cost_per_hour: Maximum acceptable cost per hour
+            regions: Preferred regions filter
             **kwargs: Additional pod configuration
             
         Returns:
@@ -323,7 +414,8 @@ class PrimeManager:
         resources = self.find_gpus(
             gpu_type=gpu_type,
             min_count=gpu_count,
-            max_cost_per_hour=max_cost_per_hour
+            max_cost_per_hour=max_cost_per_hour,
+            regions=regions
         )
         
         if not resources:

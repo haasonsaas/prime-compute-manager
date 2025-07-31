@@ -1,6 +1,7 @@
 """Direct API client for PrimeIntellect API."""
 
 import os
+import time
 from typing import Dict, List, Optional, Any
 import requests
 from .models import GPUResource, GPUType
@@ -34,6 +35,36 @@ class PrimeAPIClient:
             "Content-Type": "application/json"
         })
     
+    def _make_request_with_retry(self, url: str, params: dict, max_retries: int = 3, base_delay: float = 1.0) -> dict:
+        """Make HTTP request with exponential backoff retry on rate limits."""
+        for attempt in range(max_retries + 1):
+            try:
+                response = self.session.get(url, params=params, timeout=30)
+                response.raise_for_status()
+                return response.json()
+                
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 429:  # Rate limited
+                    if attempt < max_retries:
+                        delay = base_delay * (2 ** attempt)  # Exponential backoff
+                        time.sleep(delay)
+                        continue
+                    else:
+                        raise RuntimeError("Rate limit exceeded after retries. Please wait before trying again.")
+                elif e.response.status_code == 401:
+                    raise RuntimeError("Unauthorized. Please run 'prime login' to authenticate.")
+                else:
+                    raise RuntimeError(f"API request failed: {e}")
+            except requests.exceptions.Timeout:
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** attempt)
+                    time.sleep(delay)
+                    continue
+                else:
+                    raise RuntimeError("API request timed out after retries.")
+            except requests.exceptions.RequestException as e:
+                raise RuntimeError(f"API request failed: {e}")
+    
     def get_availability(
         self,
         regions: Optional[List[str]] = None,
@@ -62,21 +93,17 @@ class PrimeAPIClient:
             params["gpu_type"] = gpu_type
         
         try:
-            # Get single GPU availability
-            response = self.session.get(
+            # Get single GPU availability with retry logic
+            single_gpus = self._make_request_with_retry(
                 f"{self.base_url}/api/v1/availability",
                 params=params
             )
-            response.raise_for_status()
-            single_gpus = response.json()
             
-            # Get cluster availability
-            cluster_response = self.session.get(
+            # Get cluster availability with retry logic
+            clusters = self._make_request_with_retry(
                 f"{self.base_url}/api/v1/availability/clusters",
                 params=params
             )
-            cluster_response.raise_for_status()
-            clusters = cluster_response.json()
             
             # Combine results - API returns dict with GPU types as keys
             combined = {}
@@ -94,13 +121,12 @@ class PrimeAPIClient:
 
             return combined
             
-        except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 401:
-                raise RuntimeError("Unauthorized. Please run 'prime login' to authenticate.")
-            elif e.response.status_code == 429:
-                raise RuntimeError("Rate limit exceeded. Please wait before retrying.")
+        except Exception as e:
+            # Re-raise RuntimeError from retry logic, wrap other exceptions
+            if isinstance(e, RuntimeError):
+                raise
             else:
-                raise RuntimeError(f"API request failed: {e}")
+                raise RuntimeError(f"Unexpected error during API call: {e}")
     
     def map_gpu_type(self, gpu_type_str: str) -> GPUType:
         """Map API GPU type string to our enum."""

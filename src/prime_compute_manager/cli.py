@@ -124,19 +124,107 @@ def list_resources(ctx, gpu_type: Optional[str], min_count: int, max_cost: Optio
 @click.option("--count", type=int, default=1, help="Number of GPUs")
 @click.option("--name", help="Pod name")
 @click.option("--region", help="Preferred region")
-@click.option("--image", help="Container image")
+@click.option("--image", default="pytorch/pytorch:2.0.1-cuda11.7-cudnn8-devel", help="Container image")
+@click.option("--disk-size", type=int, default=50, help="Disk size in GB")
+@click.option("--vcpus", type=int, help="Number of vCPUs")
+@click.option("--memory", type=int, help="Memory in GB")
+@click.option("--env", multiple=True, help="Environment variables (KEY=value)")
+@click.option("--dry-run", is_flag=True, help="Show what would be created without actually creating")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 def create_pod(gpu_type: str, count: int, name: Optional[str], region: Optional[str],
-               image: Optional[str], output_json: bool):
+               image: str, disk_size: int, vcpus: Optional[int], memory: Optional[int],
+               env: tuple, dry_run: bool, output_json: bool):
     """Create a new compute pod."""
     try:
         manager = PrimeManager()
+        
+        # Parse environment variables
+        env_dict = {}
+        for env_var in env:
+            if "=" in env_var:
+                key, value = env_var.split("=", 1)
+                env_dict[key] = value
+        
+        if dry_run:
+            # Find matching resources and show what would be created
+            resources = manager.find_gpus(
+                gpu_type=gpu_type,
+                min_count=count,
+                regions=region
+            )
+            
+            if not resources:
+                console.print(f"[red]No available {gpu_type} resources found with {count} GPUs[/red]")
+                return
+                
+            selected = resources[0]  # Would use cheapest available
+            
+            if output_json:
+                dry_run_info = {
+                    "action": "create_pod",
+                    "dry_run": True,
+                    "selected_resource": selected.dict(),
+                    "estimated_cost_per_hour": selected.cost_per_hour,
+                    "pod_config": {
+                        "name": name or f"pod-{gpu_type.lower()}-{count}gpu",
+                        "gpu_type": gpu_type,
+                        "gpu_count": count,
+                        "region": region,
+                        "image": image,
+                        "disk_size": disk_size,
+                        "vcpus": vcpus,
+                        "memory": memory,
+                        "env": env_dict
+                    }
+                }
+                click.echo(json.dumps(dry_run_info, indent=2, default=str))
+                return
+            
+            env_display = "\n".join([f"    {k}={v}" for k, v in env_dict.items()]) if env_dict else "    (none)"
+            
+            panel = Panel.fit(
+                f"[yellow]DRY RUN - Pod would be created with:[/yellow]\n\n"
+                f"[bold]Selected Resource:[/bold]\n"
+                f"  GPU Type: {selected.gpu_type.value}\n"
+                f"  Provider: {selected.provider}\n"
+                f"  Region: {selected.region}\n"
+                f"  Available: {selected.available_count}/{selected.total_count}\n"
+                f"  Cost: ${selected.cost_per_hour:.2f}/hour\n\n"
+                f"[bold]Pod Configuration:[/bold]\n"
+                f"  Name: {name or f'pod-{gpu_type.lower()}-{count}gpu'}\n"
+                f"  GPU Count: {count}\n"
+                f"  Image: {image}\n"
+                f"  Disk Size: {disk_size} GB\n"
+                + (f"  vCPUs: {vcpus}\n" if vcpus else "")
+                + (f"  Memory: {memory} GB\n" if memory else "")
+                + f"  Environment:\n{env_display}\n\n"
+                f"[bold green]Estimated Cost: ${selected.cost_per_hour:.2f}/hour[/bold green]\n"
+                f"[dim]Use without --dry-run to actually create this pod[/dim]",
+                title="Pod Creation Preview",
+                border_style="yellow"
+            )
+            console.print(panel)
+            return
+        
+        # Prepare kwargs for pod creation
+        pod_kwargs = {
+            "gpu_count": count,
+            "disk_size": disk_size,
+            "image": image
+        }
+        if vcpus:
+            pod_kwargs["vcpus"] = vcpus
+        if memory:
+            pod_kwargs["memory"] = memory
+        if env_dict:
+            pod_kwargs["env"] = env_dict
+        
         pod = manager.create_pod(
             gpu_type=gpu_type,
             gpu_count=count,
             name=name,
-            region=region,
-            image=image
+            regions=region,
+            **pod_kwargs
         )
         
         if output_json:
