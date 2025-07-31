@@ -131,7 +131,8 @@ class PrimeManager:
         min_count: int = 1,
         max_cost_per_hour: Optional[float] = None,
         regions: Optional[str] = None,
-        provider: Optional[str] = None
+        provider: Optional[str] = None,
+        include_free: bool = False
     ) -> List[GPUResource]:
         """Find available GPU resources.
         
@@ -141,6 +142,7 @@ class PrimeManager:
             max_cost_per_hour: Maximum cost per hour per GPU (filtered locally)
             regions: Preferred regions filter (e.g., 'united_states')
             provider: Provider filter (e.g., 'aws', 'azure', 'google')
+            include_free: Include $0.00 entries (default: False, filters them out)
             
         Returns:
             List of available GPU resources
@@ -178,6 +180,10 @@ class PrimeManager:
                     if resource.available_count < min_count:
                         continue
                     
+                    # Filter out $0.00 entries (likely unavailable/placeholder) unless requested
+                    if not include_free and resource.cost_per_hour <= 0.0:
+                        continue
+
                     filtered.append(resource)
                 
                 return filtered

@@ -17,7 +17,7 @@ class PrimeAPIClient:
         self.api_key = api_key or os.environ.get("PRIME_API_KEY")
         if not self.api_key:
             # Try to read from prime-cli config
-            config_path = os.path.expanduser("~/.config/prime/config.json")
+            config_path = os.path.expanduser("~/.prime/config.json")
             if os.path.exists(config_path):
                 import json
                 with open(config_path, 'r') as f:
@@ -39,7 +39,7 @@ class PrimeAPIClient:
         regions: Optional[List[str]] = None,
         gpu_count: Optional[int] = None,
         gpu_type: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, List[Dict[str, Any]]]:
         """Get GPU availability from the API.
         
         Args:
@@ -48,12 +48,14 @@ class PrimeAPIClient:
             gpu_type: Specific GPU type to filter
             
         Returns:
-            List of availability data
+            Dictionary mapping GPU types to lists of availability data
         """
         params = {}
         
         if regions:
-            params["regions"] = ",".join(regions)
+            params["regions"] = []
+            for region in regions:
+                params["regions"].extend(r.strip() for r in region.split(","))
         if gpu_count:
             params["gpu_count"] = str(gpu_count)
         if gpu_type:
@@ -76,14 +78,21 @@ class PrimeAPIClient:
             cluster_response.raise_for_status()
             clusters = cluster_response.json()
             
-            # Combine results
-            all_resources = []
-            if isinstance(single_gpus, list):
-                all_resources.extend(single_gpus)
-            if isinstance(clusters, list):
-                all_resources.extend(clusters)
-                
-            return all_resources
+            # Combine results - API returns dict with GPU types as keys
+            combined = {}
+            if isinstance(single_gpus, dict):
+                for gpu_type_key, gpus in single_gpus.items():
+                    if gpu_type_key is not None:
+                        combined[gpu_type_key] = gpus
+            if isinstance(clusters, dict):
+                for gpu_type_key, gpus in clusters.items():
+                    if gpu_type_key is not None:
+                        if gpu_type_key in combined:
+                            combined[gpu_type_key].extend(gpus)
+                        else:
+                            combined[gpu_type_key] = gpus
+
+            return combined
             
         except requests.exceptions.HTTPError as e:
             if e.response.status_code == 401:
@@ -160,43 +169,48 @@ class PrimeAPIClient:
         
         return GPUType.UNKNOWN
     
-    def to_gpu_resources(self, api_data: List[Dict[str, Any]]) -> List[GPUResource]:
+    def to_gpu_resources(self, api_data: Dict[str, List[Dict[str, Any]]]) -> List[GPUResource]:
         """Convert API response to GPUResource objects."""
         resources = []
         
-        for item in api_data:
-            # Extract pricing
-            prices = item.get("prices", {})
-            if isinstance(prices, dict):
-                # Use community price if available, otherwise on_demand
-                price = prices.get("community", prices.get("on_demand", 0))
-            else:
-                price = 0
-            
-            # Extract GPU info
-            gpu_type_str = item.get("gpu_type", "UNKNOWN")
+        # API data is now a dict with GPU types as keys and lists of configs as values
+        for gpu_type_str, gpu_configs in api_data.items():
             gpu_type = self.map_gpu_type(gpu_type_str)
             
-            # Get availability status
-            availability = item.get("availability", {})
-            if isinstance(availability, dict):
-                available = availability.get("available", 0)
-                total = availability.get("total", 0)
-            else:
-                # Fallback for different response format
-                available = item.get("available_gpus", 0)
-                total = item.get("total_gpus", available)
-            
-            resource = GPUResource(
-                gpu_type=gpu_type,
-                available_count=available,
-                total_count=total,
-                cost_per_hour=float(price) if price else 0.0,
-                provider=item.get("provider", "Unknown"),
-                region=item.get("country", item.get("location", "Unknown")),
-                prime_id=item.get("id", "")
-            )
-            
-            resources.append(resource)
+            for item in gpu_configs:
+                # Extract pricing using the actual structure from prime-cli
+                prices = item.get("prices", {})
+                if isinstance(prices, dict):
+                    # Use community price if available, otherwise on_demand
+                    price = prices.get("communityPrice", prices.get("onDemand", 0))
+                else:
+                    price = 0
+
+                # Use stock status to determine availability
+                stock_status = item.get("stockStatus", "").lower()
+                if stock_status == "available":
+                    available = item.get("gpuCount", 1)  # If available, use gpu count
+                elif stock_status == "low":
+                    available = max(1, item.get("gpuCount", 1) // 4)  # Low stock
+                elif stock_status == "medium":
+                    available = max(1, item.get("gpuCount", 1) // 2)  # Medium stock
+                elif stock_status == "high":
+                    available = item.get("gpuCount", 1)  # High availability
+                else:
+                    available = 0  # No stock
+
+                total = item.get("gpuCount", available)
+
+                resource = GPUResource(
+                    gpu_type=gpu_type,
+                    available_count=available,
+                    total_count=total,
+                    cost_per_hour=float(price) if price else 0.0,
+                    provider=item.get("provider", "Unknown"),
+                    region=item.get("country") or item.get("dataCenter") or "Unknown",
+                    prime_id=item.get("cloudId", "")
+                )
+
+                resources.append(resource)
         
         return resources

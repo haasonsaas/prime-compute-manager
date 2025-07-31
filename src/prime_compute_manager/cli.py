@@ -42,10 +42,11 @@ def pods():
 @click.option("--min-count", type=int, default=1, help="Minimum GPU count needed")
 @click.option("--max-cost", type=float, help="Maximum cost per hour per GPU")
 @click.option("--region", help="Preferred region")
+@click.option("--include-free", is_flag=True, help="Include $0.00 entries (likely unavailable)")
 @click.option("--json", "output_json", is_flag=True, help="Output as JSON")
 @click.pass_context
 def list_resources(ctx, gpu_type: Optional[str], min_count: int, max_cost: Optional[float], 
-                  region: Optional[str], output_json: bool):
+                  region: Optional[str], include_free: bool, output_json: bool):
     """List available GPU resources."""
     try:
         use_api = ctx.obj.get('use_api', True)  # Default to True
@@ -54,7 +55,8 @@ def list_resources(ctx, gpu_type: Optional[str], min_count: int, max_cost: Optio
             gpu_type=gpu_type,
             min_count=min_count, 
             max_cost_per_hour=max_cost,
-            regions=region
+            regions=region,
+            include_free=include_free
         )
         
         if output_json:
