@@ -19,7 +19,7 @@ except ImportError:
 class PrimeManager:
     """Main manager for PrimeIntellect GPU resources."""
     
-    def __init__(self, config_path: Optional[str] = None, use_api: bool = False):
+    def __init__(self, config_path: Optional[str] = None, use_api: bool = True):
         """Initialize the PrimeManager.
         
         Args:

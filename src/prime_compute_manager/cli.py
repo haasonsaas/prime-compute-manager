@@ -23,12 +23,12 @@ def main():
 
 
 @main.group()
-@click.option('--use-api', is_flag=True, help='Use direct API access (requires API key)')
+@click.option('--no-api', is_flag=True, help='Disable direct API access and use CLI parsing instead')
 @click.pass_context
-def resources(ctx, use_api):
+def resources(ctx, no_api):
     """Manage GPU resources."""
     ctx.ensure_object(dict)
-    ctx.obj['use_api'] = use_api
+    ctx.obj['use_api'] = not no_api  # Default is to use API
 
 
 @main.group()  
@@ -48,7 +48,7 @@ def list_resources(ctx, gpu_type: Optional[str], min_count: int, max_cost: Optio
                   region: Optional[str], output_json: bool):
     """List available GPU resources."""
     try:
-        use_api = ctx.obj.get('use_api', False)
+        use_api = ctx.obj.get('use_api', True)  # Default to True
         manager = PrimeManager(use_api=use_api)
         resources = manager.find_gpus(
             gpu_type=gpu_type,
