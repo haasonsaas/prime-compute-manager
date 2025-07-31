@@ -42,6 +42,7 @@ class GPUResource(BaseModel):
     provider: str
     region: str
     availability_zone: Optional[str] = None
+    prime_id: Optional[str] = None  # Store the original prime-cli configuration ID
     
     @property
     def utilization(self) -> float:
