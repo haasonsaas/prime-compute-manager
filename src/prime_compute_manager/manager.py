@@ -89,11 +89,12 @@ class PrimeManager:
         # If no match found, return UNKNOWN
         return GPUType.UNKNOWN
     
-    def _run_prime_command(self, command: List[str]) -> str:
+    def _run_prime_command(self, command: List[str], retry_on_rate_limit: bool = True) -> str:
         """Run a prime-cli command and return raw text output.
         
         Args:
             command: Command arguments to pass to prime-cli
+            retry_on_rate_limit: Whether to retry on rate limit errors
             
         Returns:
             Raw text output from prime-cli
@@ -108,22 +109,60 @@ class PrimeManager:
             if os.path.exists(venv_prime):
                 prime_cmd = venv_prime
         
-        try:
-            result = subprocess.run(
-                [prime_cmd] + command,
-                capture_output=True,
-                text=True,
-                check=True
-            )
-            
-            return result.stdout
+        max_retries = 3 if retry_on_rate_limit else 1
+        for attempt in range(max_retries):
+            try:
+                result = subprocess.run(
+                    [prime_cmd] + command,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=60  # 60 second timeout
+                )
                 
-        except FileNotFoundError:
-            raise RuntimeError("prime-cli is not installed. Please install it with: pip install prime-cli")
-        except subprocess.CalledProcessError as e:
-            if e.stderr and ("Unauthorized" in e.stderr or "authentication" in e.stderr.lower()):
-                raise RuntimeError("Not authenticated with prime-cli. Please run: prime login")
-            raise RuntimeError(f"Prime CLI command failed: {e.stderr}")
+                return result.stdout
+                    
+            except FileNotFoundError:
+                raise RuntimeError("prime-cli is not installed. Please install it with: pip install prime-cli")
+            except subprocess.TimeoutExpired:
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+                else:
+                    raise RuntimeError("Prime CLI command timed out")
+            except subprocess.CalledProcessError as e:
+                if e.stderr:
+                    error_msg = e.stderr.strip()
+                    
+                    # Check for authentication errors
+                    if "Unauthorized" in error_msg or "authentication" in error_msg.lower():
+                        raise RuntimeError("Not authenticated with prime-cli. Please run: prime login")
+                    
+                    # Check for rate limiting
+                    if "429" in error_msg or "Too Many Requests" in error_msg or "rate limit" in error_msg.lower():
+                        if attempt < max_retries - 1 and retry_on_rate_limit:
+                            import time
+                            delay = 5 * (2 ** attempt)  # 5, 10, 20 seconds
+                            from rich.console import Console
+                            stderr_console = Console(stderr=True)
+                            stderr_console.print(f"[yellow]Rate limited, waiting {delay}s before retry {attempt + 1}/{max_retries - 1}...[/yellow]")
+                            time.sleep(delay)
+                            continue
+                        else:
+                            raise RuntimeError("Rate limit exceeded. Please wait a few minutes before trying again.")
+                    
+                    # Check for specific error patterns
+                    if "No GPU resources found" in error_msg:
+                        raise RuntimeError("No GPU resources found matching your criteria")
+                    
+                    # Generic error
+                    raise RuntimeError(f"Prime CLI command failed: {error_msg}")
+                else:
+                    raise RuntimeError(f"Prime CLI command failed with exit code {e.returncode}")
+        
+        # Should never reach here, but just in case
+        raise RuntimeError("All retry attempts failed")
     
     def find_gpus(
         self, 
@@ -443,23 +482,103 @@ class PrimeManager:
         Returns:
             Updated pod information
         """
-        if pod_id not in self._pods:
-            raise ValueError(f"Pod {pod_id} not found")
-        
         try:
-            # In real implementation, query prime-cli for actual status
-            pod = self._pods[pod_id]
+            # Query prime-cli for actual pod status
+            cmd = ["pods", "status", pod_id]
+            output = self._run_prime_command(cmd)
             
-            # Mock status update
-            if pod.status == PodStatus.CREATING:
-                pod.status = PodStatus.RUNNING
-                pod.started_at = datetime.utcnow()
-                pod.ssh_connection = f"ssh user@{pod_id}.prime.example.com"
+            # Parse the detailed status output
+            pod_info = self._parse_pod_status_output(output)
             
-            return pod
+            # Check if we have this pod in our local cache
+            if pod_id in self._pods:
+                # Update cached pod with real status
+                cached_pod = self._pods[pod_id]
+                cached_pod.status = self._parse_pod_status(pod_info.get("status", "unknown"))
+                if pod_info.get("ssh_connection"):
+                    cached_pod.ssh_connection = pod_info["ssh_connection"]
+                if pod_info.get("started_at"):
+                    cached_pod.started_at = pod_info["started_at"]
+                if pod_info.get("stopped_at"):
+                    cached_pod.stopped_at = pod_info["stopped_at"]
+                return cached_pod
+            else:
+                # Create new pod object from status output
+                pod = Pod(
+                    id=pod_id,
+                    name=pod_info.get("name", f"pod-{pod_id[:8]}"),
+                    status=self._parse_pod_status(pod_info.get("status", "unknown")),
+                    gpu_type=self._parse_gpu_type(pod_info.get("gpu_type", "")),
+                    gpu_count=pod_info.get("gpu_count", 1),
+                    cost_per_hour=pod_info.get("cost_per_hour", 0.0),
+                    created_at=pod_info.get("created_at", datetime.utcnow()),
+                    provider=pod_info.get("provider", "Unknown"),
+                    region=pod_info.get("region", "Unknown"),
+                    ssh_connection=pod_info.get("ssh_connection")
+                )
+                
+                if pod_info.get("started_at"):
+                    pod.started_at = pod_info["started_at"]
+                if pod_info.get("stopped_at"):
+                    pod.stopped_at = pod_info["stopped_at"]
+                
+                # Cache the pod
+                self._pods[pod_id] = pod
+                return pod
             
         except Exception as e:
-            raise RuntimeError(f"Failed to get pod status: {e}")
+            # If prime-cli fails, check if we have cached data
+            if pod_id in self._pods:
+                return self._pods[pod_id]
+            else:
+                raise RuntimeError(f"Failed to get pod status and no cached data available: {e}")
+    
+    def _parse_pod_status_output(self, output: str) -> Dict[str, Any]:
+        """Parse prime pods status command output."""
+        pod_info = {}
+        
+        lines = output.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            
+            # Extract key-value pairs from status output
+            if ':' in line and not line.startswith('┃') and not line.startswith('│'):
+                key, value = line.split(':', 1)
+                key = key.strip().lower().replace(' ', '_')
+                value = value.strip()
+                
+                if key == 'status':
+                    pod_info['status'] = value
+                elif key == 'name' or key == 'pod_name':
+                    pod_info['name'] = value
+                elif key == 'gpu_type' or key == 'gpu':
+                    pod_info['gpu_type'] = value
+                elif key == 'gpu_count':
+                    try:
+                        pod_info['gpu_count'] = int(value)
+                    except ValueError:
+                        pod_info['gpu_count'] = 1
+                elif key == 'cost_per_hour' or key == 'hourly_cost':
+                    try:
+                        # Remove $ and any other formatting
+                        clean_value = value.replace('$', '').replace('/hour', '').strip()
+                        pod_info['cost_per_hour'] = float(clean_value)
+                    except ValueError:
+                        pod_info['cost_per_hour'] = 0.0
+                elif key == 'provider':
+                    pod_info['provider'] = value
+                elif key == 'region' or key == 'location':
+                    pod_info['region'] = value
+                elif key == 'ssh' or key == 'ssh_connection':
+                    pod_info['ssh_connection'] = value
+                elif key == 'created' or key == 'created_at':
+                    try:
+                        # Try to parse datetime, fall back to current time
+                        pod_info['created_at'] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    except ValueError:
+                        pod_info['created_at'] = datetime.utcnow()
+        
+        return pod_info
     
     def list_pods(self, active_only: bool = True) -> List[Pod]:
         """List all pods from prime-cli.
@@ -533,21 +652,84 @@ class PrimeManager:
         except Exception as e:
             raise RuntimeError(f"Failed to terminate pod: {e}")
     
-    def ssh_to_pod(self, pod_id: str) -> str:
-        """Get SSH connection string for a pod.
+    def ssh_to_pod(self, pod_id: str, interactive: bool = False) -> str:
+        """Get SSH connection for a pod or launch interactive SSH session.
         
         Args:
             pod_id: Pod identifier
+            interactive: If True, launch interactive SSH session
             
         Returns:
-            SSH connection command
+            SSH connection command or result of interactive session
         """
-        pod = self.get_pod_status(pod_id)
+        try:
+            # First check pod status
+            pod = self.get_pod_status(pod_id)
+            
+            if pod.status != PodStatus.RUNNING:
+                raise RuntimeError(f"Pod {pod_id} is not running (current status: {pod.status.value})")
+            
+            if interactive:
+                # Launch interactive SSH session using prime-cli
+                cmd = ["pods", "ssh", pod_id]
+                
+                from rich.console import Console
+                stderr_console = Console(stderr=True)
+                stderr_console.print(f"[green]Connecting to pod {pod_id}...[/green]")
+                
+                # Use subprocess.run without capture_output for interactive session
+                import subprocess
+                import sys
+                
+                # Try to find prime in the virtual environment first
+                prime_cmd = "prime"
+                if hasattr(sys, 'prefix') and sys.prefix:
+                    venv_prime = os.path.join(sys.prefix, 'bin', 'prime')
+                    if os.path.exists(venv_prime):
+                        prime_cmd = venv_prime
+                
+                result = subprocess.run([prime_cmd] + cmd)
+                return f"SSH session to pod {pod_id} completed with exit code {result.returncode}"
+            
+            else:
+                # Return SSH connection command
+                if pod.ssh_connection:
+                    return pod.ssh_connection
+                else:
+                    # Try to get SSH connection from prime-cli
+                    try:
+                        # Some versions of prime-cli might have a command to get SSH info
+                        # For now, we'll construct a reasonable SSH command
+                        return f"prime pods ssh {pod_id}"
+                    except Exception:
+                        raise RuntimeError(f"SSH connection not available for pod {pod_id}")
+            
+        except Exception as e:
+            if "not found" in str(e).lower():
+                raise RuntimeError(f"Pod {pod_id} not found")
+            else:
+                raise RuntimeError(f"Failed to connect to pod {pod_id}: {e}")
+    
+    def get_pod_logs(self, pod_id: str, lines: int = 100) -> str:
+        """Get logs from a pod.
         
-        if pod.status != PodStatus.RUNNING:
-            raise RuntimeError(f"Pod {pod_id} is not running")
-        
-        if not pod.ssh_connection:
-            raise RuntimeError(f"SSH connection not available for pod {pod_id}")
-        
-        return pod.ssh_connection
+        Args:
+            pod_id: Pod identifier
+            lines: Number of log lines to retrieve
+            
+        Returns:
+            Pod logs
+        """
+        try:
+            # Check if prime-cli has a logs command
+            cmd = ["pods", "logs", pod_id, "--lines", str(lines)]
+            output = self._run_prime_command(cmd)
+            return output
+            
+        except Exception as e:
+            # Fallback: try to get logs through SSH if available
+            if "not found" in str(e).lower() or "command" in str(e).lower():
+                raise RuntimeError(f"Pod logs not available through prime-cli. "
+                                 f"Try SSH to pod and check logs manually: prime pods ssh {pod_id}")
+            else:
+                raise RuntimeError(f"Failed to get pod logs: {e}")
