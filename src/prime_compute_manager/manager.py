@@ -103,8 +103,10 @@ class PrimeManager:
             ]
             
             for resource_data in mock_resources:
-                if resource_data["available_count"] >= min_count:
-                    if max_cost_per_hour is None or resource_data["cost_per_hour"] <= max_cost_per_hour:
+                available_count = int(resource_data["available_count"])
+                cost_per_hour = float(resource_data["cost_per_hour"])
+                if available_count >= min_count:
+                    if max_cost_per_hour is None or cost_per_hour <= max_cost_per_hour:
                         resources.append(GPUResource(**resource_data))
             
             return resources

@@ -97,6 +97,7 @@ class Job(BaseModel):
     completed_at: Optional[datetime] = None
     error_message: Optional[str] = None
     output_path: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
     
     @property
     def runtime_seconds(self) -> float:
@@ -118,6 +119,7 @@ class TeamUsage(BaseModel):
     total_cost_today: float
     total_cost_month: float
     pod_breakdown: List[Pod] = Field(default_factory=list)
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
     
     
 class Alert(BaseModel):

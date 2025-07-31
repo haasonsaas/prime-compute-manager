@@ -33,7 +33,7 @@ def pods():
 
 
 @resources.command("list")
-@click.option("--gpu-type", type=click.Choice([gt.value for gt in GPUType]), help="Filter by GPU type")
+@click.option("--gpu-type", type=click.Choice([gt.value for gt in GPUType.__members__.values()]), help="Filter by GPU type")
 @click.option("--min-count", type=int, default=1, help="Minimum GPU count needed")
 @click.option("--max-cost", type=float, help="Maximum cost per hour per GPU")
 @click.option("--region", help="Preferred region")
@@ -86,7 +86,7 @@ def list_resources(gpu_type: Optional[str], min_count: int, max_cost: Optional[f
 
 
 @pods.command("create")
-@click.option("--gpu-type", required=True, type=click.Choice([gt.value for gt in GPUType]), 
+@click.option("--gpu-type", required=True, type=click.Choice([gt.value for gt in GPUType.__members__.values()]), 
               help="GPU type to request")
 @click.option("--count", type=int, default=1, help="Number of GPUs")
 @click.option("--name", help="Pod name")

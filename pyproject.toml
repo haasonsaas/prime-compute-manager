@@ -83,3 +83,6 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "--cov=prime_compute_manager --cov-report=term-missing"
+
+[tool.pyrefly]
+python-version = "3.8.0"

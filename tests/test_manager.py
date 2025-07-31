@@ -11,7 +11,9 @@ from prime_compute_manager.models import GPUResource, Pod, GPUType, PodStatus
 class TestPrimeManager:
     """Test cases for PrimeManager."""
     
-    def setup_method(self):
+    manager: PrimeManager
+    
+    def setup_method(self) -> None:
         """Set up test fixtures."""
         self.manager = PrimeManager()
     
@@ -106,8 +108,13 @@ class TestPrimeManager:
             assert updated_pod.status == PodStatus.RUNNING  # Mock updates to running
             assert updated_pod.ssh_connection is not None
     
-    def test_list_pods_empty(self):
+    @patch('prime_compute_manager.manager.subprocess.run')
+    def test_list_pods_empty(self, mock_run):
         """Test listing pods when none exist."""
+        mock_result = Mock()
+        mock_result.stdout = '{"pods": []}'
+        mock_run.return_value = mock_result
+        
         pods = self.manager.list_pods()
         assert pods == []
     
@@ -173,11 +180,23 @@ class TestPrimeManager:
                 name="test-pod"
             )
             
-            # Don't update status to running, should fail
-            pod.status = PodStatus.CREATING
-            
-            with pytest.raises(RuntimeError, match="Pod .* is not running"):
-                self.manager.ssh_to_pod(pod.id)
+            # Mock get_pod_status to return a pod that's still creating
+            with patch.object(self.manager, 'get_pod_status') as mock_status:
+                creating_pod = Pod(
+                    id=pod.id,
+                    name=pod.name,
+                    status=PodStatus.CREATING,
+                    gpu_type=pod.gpu_type,
+                    gpu_count=pod.gpu_count,
+                    cost_per_hour=pod.cost_per_hour,
+                    created_at=pod.created_at,
+                    provider=pod.provider,
+                    region=pod.region
+                )
+                mock_status.return_value = creating_pod
+                
+                with pytest.raises(RuntimeError, match="Pod .* is not running"):
+                    self.manager.ssh_to_pod(pod.id)
     
     def test_ssh_to_pod_running(self):
         """Test SSH to running pod."""

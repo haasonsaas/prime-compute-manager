@@ -66,11 +66,11 @@ async def main():
     created_jobs = []
     for job_config in jobs:
         job = queue.add_job(
-            name=job_config["name"],
-            script_path=job_config["script"],
-            args=job_config["args"],
-            gpu_type=job_config["gpu_type"],
-            gpu_count=job_config["gpu_count"]
+            name=str(job_config["name"]),
+            script_path=str(job_config["script"]),
+            args=job_config["args"],  # type: ignore
+            gpu_type=str(job_config["gpu_type"]),
+            gpu_count=job_config["gpu_count"]  # type: ignore
         )
         created_jobs.append(job)
         print(f"   ✅ Added job: {job.name} ({job.id[:12]}...)")
