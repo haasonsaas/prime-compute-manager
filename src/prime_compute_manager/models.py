@@ -26,11 +26,29 @@ class PodStatus(str, Enum):
 
 class GPUType(str, Enum):
     """Supported GPU types."""
+    # High-end GPUs
     H100_80GB = "H100_80GB"
+    H100_40GB = "H100_40GB"
     A100_80GB = "A100_80GB"
     A100_40GB = "A100_40GB"
+    
+    # Mid-range GPUs
+    L40 = "L40"
+    L40S = "L40S"
+    L4 = "L4"
+    A10 = "A10"
     V100_32GB = "V100_32GB"
+    V100 = "V100"
+    
+    # Consumer GPUs
     RTX_4090 = "RTX_4090"
+    RTX_3090 = "RTX_3090"
+    RTX_3080 = "RTX_3080"
+    
+    # Other
+    T4 = "T4"
+    CPU = "CPU"  # For CPU-only instances
+    UNKNOWN = "UNKNOWN"  # Fallback for unrecognized types
 
 
 class GPUResource(BaseModel):

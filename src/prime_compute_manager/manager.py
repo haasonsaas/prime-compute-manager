@@ -30,6 +30,26 @@ class PrimeManager:
             # Default to RUNNING if status is not recognized
             return PodStatus.RUNNING
     
+    def _parse_gpu_type(self, gpu_type_str: str) -> GPUType:
+        """Safely parse GPU type string to GPUType enum."""
+        # Extract the main GPU type (first part before any additional info)
+        gpu_type_main = gpu_type_str.split()[0].upper()
+        
+        # Handle special cases
+        if "CPU" in gpu_type_main:
+            return GPUType.CPU
+        
+        # Try to match known GPU types
+        for gpu_type in GPUType:
+            if gpu_type.value == gpu_type_main:
+                return gpu_type
+            # Also try without underscores (e.g., RTX_4090 vs RTX4090)
+            if gpu_type.value.replace("_", "") == gpu_type_main.replace("_", ""):
+                return gpu_type
+        
+        # If no match found, return UNKNOWN
+        return GPUType.UNKNOWN
+    
     def _run_prime_command(self, command: List[str]) -> str:
         """Run a prime-cli command and return raw text output.
         
@@ -77,8 +97,7 @@ class PrimeManager:
         """
         # Build command
         cmd = ["availability", "list"]
-        if gpu_type:
-            cmd.extend(["--gpu-type", gpu_type])
+        # Note: We filter gpu_type client-side to avoid API errors with unrecognized types
         if min_count > 1:
             cmd.extend(["--gpu-count", str(min_count)])
         if regions:
@@ -95,12 +114,18 @@ class PrimeManager:
             # Convert to GPUResource objects
             resources = []
             for resource_data in parsed_resources:
-                # Apply filters
+                # Parse GPU type first
+                parsed_gpu_type = self._parse_gpu_type(resource_data["gpu_type"])
+                
+                # Apply filters including GPU type filter
+                if gpu_type and parsed_gpu_type.value != gpu_type:
+                    continue  # Skip if doesn't match requested GPU type
+                    
                 if resource_data["available_count"] >= min_count:
                     if max_cost_per_hour is None or resource_data["cost_per_hour"] <= max_cost_per_hour:
                         # Convert to our GPUResource model
                         gpu_resource = GPUResource(
-                            gpu_type=GPUType(resource_data["gpu_type"].split()[0]),  # Take first part
+                            gpu_type=parsed_gpu_type,
                             available_count=resource_data["available_count"],
                             total_count=resource_data["total_count"], 
                             cost_per_hour=resource_data["cost_per_hour"],
