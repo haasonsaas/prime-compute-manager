@@ -17,6 +17,15 @@ A Python wrapper for [PrimeIntellect CLI](https://github.com/PrimeIntellect-ai/p
 - **Non-Interactive Creation**: Create pods with comprehensive parameters (disk, memory, environment)
 - **Dry-Run Mode**: Preview pod configuration and costs before creation
 
+### 🌐 **Multi-Pod Management (New!)**
+- **Pod Configuration System**: Store and manage multiple pod configurations in `~/.pcm_config`
+- **Active Pod Concept**: Switch between different managed pods with simple commands
+- **SSH Automation**: Automatic SSH connection management and pod setup automation
+- **Pod Setup Scripts**: One-command pod setup with automated script execution
+- **Connection Testing**: Automatic SSH connection validation and pod health checks
+
+*Multi-pod management inspired by the excellent [badlogic/pi](https://github.com/badlogic/pi) project*
+
 ### 🛡️ **Enterprise-Grade Reliability**
 - **Rate Limiting**: Exponential backoff retry for both API and CLI calls
 - **Timeout Handling**: 60-second timeouts with intelligent retry logic
@@ -29,6 +38,7 @@ A Python wrapper for [PrimeIntellect CLI](https://github.com/PrimeIntellect-ai/p
 - **Cost Safety**: Dry-run mode and filtering protect against unexpected charges
 - **Smart Caching**: Local pod caching with real-time status updates
 - **Clean CLI**: Comprehensive command-line interface with JSON output support
+- **Configuration Persistence**: Automatic migration of old config formats to new ones
 
 > **Note**: This library provides a Python wrapper around the prime-cli tool. It parses prime-cli's table output and provides a more convenient API for managing GPU resources programmatically.
 
@@ -136,7 +146,94 @@ if resources:
     print(f"SSH command: {ssh_cmd}")
 ```
 
-### 3. Understanding the Workflow
+### 3. Multi-Pod Management (New!)
+
+Prime Compute Manager now includes powerful multi-pod configuration management inspired by badlogic/pi:
+
+#### Setup a Pod Configuration
+
+```bash
+# Configure a new pod with SSH connection
+pcm pod setup my-gpu-server "root@192.168.1.100 -p 22"
+
+# With automated setup script
+pcm pod setup my-gpu-server "root@192.168.1.100 -p 22" --run-setup
+
+# Skip connection testing (for temporarily unreachable pods)
+pcm pod setup my-gpu-server "root@192.168.1.100 -p 22" --no-test-connection
+```
+
+#### Manage Pod Configurations
+
+```bash
+# List all configured pods
+pcm pod list
+
+# Switch between pods (sets active pod)
+pcm pod switch my-gpu-server
+
+# Check pod status and connectivity
+pcm pod status
+
+# Remove a pod configuration
+pcm pod remove old-pod --yes
+```
+
+#### SSH and Remote Operations
+
+```bash
+# SSH into the active pod
+pcm pod shell
+
+# SSH to a specific pod
+pcm pod shell --pod my-gpu-server
+
+# Execute commands remotely
+pcm pod ssh "nvidia-smi"
+pcm pod ssh --interactive htop
+pcm pod ssh --pod my-gpu-server "prime pods list"
+
+# Check overall PCM status
+pcm status
+```
+
+#### Pod Configuration File
+
+PCM stores pod configurations in `~/.pcm_config`:
+
+```json
+{
+  "active_pod": "my-gpu-server",
+  "pods": {
+    "my-gpu-server": {
+      "name": "my-gpu-server",
+      "ssh_command": "root@192.168.1.100 -p 22",
+      "provider": "custom",
+      "region": "my-server",
+      "gpu_type": "RTX_4090",
+      "gpu_count": 2,
+      "cost_per_hour": 0.0,
+      "created_at": "2024-01-01T12:00:00",
+      "status": "configured"
+    }
+  },
+  "version": "1.0"
+}
+```
+
+#### Integration with Resource Management
+
+```bash
+# List resources and show active pod info
+pcm resources list --show-active-pod
+
+# Create pod and auto-configure it
+pcm pods create --gpu-type H100_80GB --auto-configure
+
+# The new pod will be added to your configuration automatically
+```
+
+### 4. Understanding the Workflow
 
 Prime Compute Manager works by:
 
@@ -423,4 +520,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Acknowledgments
 
 - Built on top of [PrimeIntellect CLI](https://github.com/PrimeIntellect-ai/prime-cli)
+- Multi-pod management system inspired by [badlogic/pi](https://github.com/badlogic/pi)
 - Inspired by the need for better GPU resource management

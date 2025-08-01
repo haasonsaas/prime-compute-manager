@@ -10,7 +10,7 @@ from .monitor import ResourceMonitor
 __all__ = [
     "PrimeManager",
     "Pod",
-    "GPUResource", 
+    "GPUResource",
     "JobStatus",
     "JobQueue",
     "ResourceMonitor",

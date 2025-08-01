@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class JobStatus(str, Enum):
     """Status of a compute job."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -17,26 +18,28 @@ class JobStatus(str, Enum):
 
 class PodStatus(str, Enum):
     """Status of a compute pod."""
+
     CREATING = "creating"
     RUNNING = "running"
-    STOPPING = "stopping" 
+    STOPPING = "stopping"
     STOPPED = "stopped"
     FAILED = "failed"
 
 
 class GPUType(str, Enum):
     """Supported GPU types."""
+
     # High-end GPUs
     H100_80GB = "H100_80GB"
     H100_40GB = "H100_40GB"
     A100_80GB = "A100_80GB"
     A100_40GB = "A100_40GB"
-    
+
     # Professional GPUs
     RTX_A6000 = "RTX_A6000"
     RTX_A5000 = "RTX_A5000"
     RTX_A4000 = "RTX_A4000"
-    
+
     # Mid-range GPUs
     L40 = "L40"
     L40S = "L40S"
@@ -45,13 +48,13 @@ class GPUType(str, Enum):
     V100_32GB = "V100_32GB"
     V100_16GB = "V100_16GB"
     V100 = "V100"
-    
+
     # Consumer GPUs
     RTX_4090 = "RTX_4090"
     RTX_4080 = "RTX_4080"
     RTX_3090 = "RTX_3090"
     RTX_3080 = "RTX_3080"
-    
+
     # Other
     T4 = "T4"
     CPU = "CPU"  # For CPU-only instances
@@ -60,6 +63,7 @@ class GPUType(str, Enum):
 
 class GPUResource(BaseModel):
     """GPU resource information."""
+
     gpu_type: GPUType
     available_count: int
     total_count: int
@@ -68,7 +72,7 @@ class GPUResource(BaseModel):
     region: str
     availability_zone: Optional[str] = None
     prime_id: Optional[str] = None  # Store the original prime-cli configuration ID
-    
+
     @property
     def utilization(self) -> float:
         """Calculate GPU utilization percentage."""
@@ -79,6 +83,7 @@ class GPUResource(BaseModel):
 
 class Pod(BaseModel):
     """Compute pod information."""
+
     id: str
     name: str
     status: PodStatus
@@ -92,17 +97,17 @@ class Pod(BaseModel):
     provider: str
     region: str
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    
+
     @property
     def runtime_hours(self) -> float:
         """Calculate pod runtime in hours."""
         if not self.started_at:
             return 0.0
-        
+
         end_time = self.stopped_at or datetime.utcnow()
         runtime = end_time - self.started_at
         return runtime.total_seconds() / 3600
-    
+
     @property
     def total_cost(self) -> float:
         """Calculate total cost of pod."""
@@ -111,6 +116,7 @@ class Pod(BaseModel):
 
 class Job(BaseModel):
     """Compute job information."""
+
     id: str
     name: str
     status: JobStatus
@@ -124,13 +130,13 @@ class Job(BaseModel):
     error_message: Optional[str] = None
     output_path: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
-    
+
     @property
     def runtime_seconds(self) -> float:
         """Calculate job runtime in seconds."""
         if not self.started_at:
             return 0.0
-        
+
         end_time = self.completed_at or datetime.utcnow()
         runtime = end_time - self.started_at
         return runtime.total_seconds()
@@ -138,6 +144,7 @@ class Job(BaseModel):
 
 class TeamUsage(BaseModel):
     """Team resource usage information."""
+
     team_name: str
     active_pods: int
     total_gpus_used: int
@@ -146,10 +153,11 @@ class TeamUsage(BaseModel):
     total_cost_month: float
     pod_breakdown: List[Pod] = Field(default_factory=list)
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    
-    
+
+
 class Alert(BaseModel):
     """Resource usage alert."""
+
     id: str
     name: str
     condition: str
